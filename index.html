@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kartu 13</title>
+<style>
+:root{--felt:#12382b;--felt2:#0c2a20;--ink:#f3ecd8;--gold:#e0b44c;--red:#c8342b;--card:#fbf7ea;--mute:#8fb0a2}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,var(--felt),var(--felt2));color:var(--ink);font:16px/1.4 Georgia,'Times New Roman',serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:2rem;margin:.2em 0}
+h2{font-size:1.1rem;font-weight:normal;color:var(--mute);margin:0 0 12px}
+input,button{font:inherit;border-radius:8px;border:1px solid var(--gold);padding:10px 14px}
+input{background:#0000004d;color:var(--ink);width:100%;margin:6px 0}
+button{background:var(--gold);color:#201a08;cursor:pointer;font-weight:bold}
+button.ghost{background:transparent;color:var(--gold)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible{outline:3px solid #fff}
+.box{background:#0000003a;border:1px solid #ffffff22;border-radius:12px;padding:16px;margin:12px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row>*{flex:1}
+.code{font-size:2.4rem;letter-spacing:.3em;color:var(--gold);text-align:center;user-select:all}
+.opps{display:flex;gap:8px;flex-wrap:wrap}
+.opp{flex:1;min-width:90px;padding:8px;border-radius:10px;border:1px solid #ffffff22;text-align:center;background:#0000002e}
+.opp.turn,.me.turn{border-color:var(--gold);box-shadow:0 0 0 2px var(--gold)}
+.opp.pass{opacity:.5}
+.table{min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:12px 0}
+.cards{display:flex;flex-wrap:wrap;justify-content:center}
+.c{width:46px;height:68px;background:var(--card);color:#1a1a1a;border-radius:6px;border:1px solid #0006;margin:0 -4px 8px 0;padding:3px 4px;font-weight:bold;font-size:1rem;line-height:1.1;cursor:default;user-select:none;position:relative}
+.c.r{color:var(--red)}
+.c b{display:block;font-size:1.3rem;font-weight:normal;text-align:center;margin-top:6px}
+.hand .c{cursor:pointer;transition:transform .12s}
+.hand .c.sel{transform:translateY(-14px);outline:2px solid var(--gold)}
+.me{padding:10px;border-radius:12px;border:1px solid transparent}
+.msg{color:var(--mute);min-height:1.4em;text-align:center}
+.err{color:#ff9d92}
+li{margin:4px 0}
+.win{text-align:center;font-size:1.5rem;color:var(--gold)}
+@media(prefers-reduced-motion:reduce){.hand .c{transition:none}}
+</style>
+</head>
+<body>
+<main id="app"></main>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script>
+/* ====== CONFIG FIREBASE ====== */
+const firebaseConfig = {
+  apiKey: "AIzaSyDuIFh5L1U6QfmGXf6gwyqhLNqs_flk6-A",
+  authDomain: "poker13-86781.firebaseapp.com",
+  databaseURL: "https://poker13-86781-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "poker13-86781",
+  storageBucket: "poker13-86781.firebasestorage.app",
+  messagingSenderId: "277404446731",
+  appId: "1:277404446731:web:1b87947e9c6512f8b4d70e"
+};
+/* ============================= */
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
+const rk = id => id >> 2, su = id => id & 3;
+const $ = document.getElementById('app');
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// id kartu 0..51: rank = id>>2 (3..2), suit = id&3 (♠<♣<♦<♥). Makin besar id = makin kuat.
+function ev(cs) {
+  const c = [...cs].sort((a, b) => a - b), n = c.length;
+  if (!n) return null;
+  const r = c.map(rk), top = c[n - 1];
+  if (n <= 4 && r.every(x => x === r[0])) return { t: ['', 's', 'p', 't', 'q'][n], n, k: top };
+  if (n >= 3 && r[n - 1] < 12) {
+    for (let i = 1; i < n; i++) if (r[i] !== r[i - 1] + 1) return null;
+    return { t: 'r', n, k: top };
+  }
+  return null;
+}
+function beats(a, l) {
+  if (!l) return true;
+  if (a.t === l.t && a.n === l.n) return a.k > l.k;
+  if (a.t === 'q' && (l.t === 's' || l.t === 'p') && rk(l.k) === 12) return true; // bom potong 2
+  return false;
+}
+
+function nextTurn(g, passed) {
+  let i = g.turn;
+  do { i = (i + 1) % g.order.length; } while (passed[g.order[i]]);
+  return i;
+}
+function move(g, pid, cards, pass) {
+  if (!g || g.over || g.order[g.turn] !== pid) return;
+  const last = g.last || null, passed = g.passed || {};
+  if (pass) {
+    if (!last || g.first) return;
+    passed[pid] = true;
+    g.turn = nextTurn(g, passed);
+    if (g.order[g.turn] === last.p) { g.last = null; g.passed = {}; } else g.passed = passed;
+    return g;
+  }
+  const hand = g.hands[pid] || [];
+  if (!cards.length || !cards.every(c => hand.includes(c))) return;
+  const e = ev(cards);
+  if (!e || (g.first && !cards.includes(0)) || !beats(e, last)) return;
+  g.hands[pid] = hand.filter(c => !cards.includes(c));
+  g.last = { p: pid, c: [...cards].sort((a, b) => a - b), t: e.t, n: e.n, k: e.k };
+  g.first = false;
+  if (!g.hands[pid].length) { g.over = true; g.winner = pid; return g; }
+  g.turn = nextTurn(g, passed);
+  g.passed = passed;
+  return g;
+}
+function deal(pids) {
+  const d = [...Array(52).keys()];
+  for (let i = 51; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [d[i], d[j]] = [d[j], d[i]]; }
+  const hands = {};
+  pids.forEach((p, i) => hands[p] = d.slice(i * 13, i * 13 + 13).sort((a, b) => a - b));
+  const start = pids.findIndex(p => hands[p].includes(0));
+  return { order: pids, hands, turn: start, last: null, passed: {}, first: true, over: false };
+}
+
+// ---------- state lokal ----------
+let me = localStorage.getItem('k13pid');
+if (!me) { me = 'p' + Math.random().toString(36).slice(2, 10); localStorage.setItem('k13pid', me); }
+let code = null, room = null, ref = null, sel = new Set(), err = '';
+
+function setErr(m) { err = m; draw(); }
+function genCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from({ length: 5 }, () => A[Math.random() * A.length | 0]).join('');
+}
+async function createRoom() {
+  const name = document.getElementById('nm').value.trim();
+  if (!name) return setErr('Isi nama dulu.');
+  localStorage.setItem('k13name', name);
+  for (let i = 0; i < 5; i++) {
+    const c = genCode();
+    const r = await db.ref('rooms/' + c).transaction(v => v === null ? { host: me, status: 'lobby', created: Date.now(), players: { [me]: { n: name, t: Date.now() } } } : undefined);
+    if (r.committed) return enter(c);
+  }
+  setErr('Gagal bikin room, coba lagi.');
+}
+async function joinRoom() {
+  const name = document.getElementById('nm').value.trim();
+  const c = document.getElementById('cd').value.trim().toUpperCase();
+  if (!name) return setErr('Isi nama dulu.');
+  if (c.length < 5) return setErr('Kode room 5 karakter.');
+  localStorage.setItem('k13name', name);
+  let reason = '';
+  const r = await db.ref('rooms/' + c).transaction(v => {
+    if (!v) { reason = 'Room tidak ditemukan.'; return v; }
+    const ps = v.players || {};
+    if (ps[me]) return v;
+    if (v.status !== 'lobby') { reason = 'Game sudah dimulai.'; return; }
+    if (Object.keys(ps).length >= 4) { reason = 'Room penuh (maks 4).'; return; }
+    ps[me] = { n: name, t: Date.now() };
+    v.players = ps;
+    return v;
+  });
+  if (!r.committed || !r.snapshot.val()) return setErr(reason || 'Gagal join.');
+  enter(c);
+}
+function enter(c) {
+  code = c; err = ''; sel.clear();
+  localStorage.setItem('k13room', c);
+  ref = db.ref('rooms/' + c);
+  ref.on('value', s => {
+    room = s.val();
+    if (!room || !(room.players || {})[me]) { leave(true); return; }
+    draw();
+  });
+}
+function leave(silent) {
+  if (ref) ref.off();
+  if (!silent && room && room.status === 'lobby') {
+    if (room.host === me) ref.remove(); else ref.child('players/' + me).remove();
+  }
+  localStorage.removeItem('k13room');
+  code = room = ref = null; sel.clear(); draw();
+}
+function start() {
+  const pids = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t).map(x => x[0]);
+  if (pids.length < 2) return;
+  ref.update({ status: 'play', game: deal(pids) });
+}
+function play(pass) {
+  const cards = [...sel];
+  ref.child('game').transaction(g => g === null ? g : move(g, me, cards, pass), (e, ok) => {
+    if (!ok) { err = pass ? 'Tidak bisa lewat sekarang.' : 'Kombinasi tidak valid / tidak cukup tinggi.'; draw(); }
+    else { err = ''; sel.clear(); }
+  }, false);
+}
+
+// ---------- tampilan ----------
+const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}<b>${S[su(id)]}</b></div>`;
+const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri' };
+
+function draw() {
+  if (!room) return drawHome();
+  if (room.status === 'lobby') return drawLobby();
+  drawGame();
+}
+function drawHome() {
+  const nm = localStorage.getItem('k13name') || '', rc = localStorage.getItem('k13room') || '';
+  $.innerHTML = `<h1>Kartu 13</h1><h2>Tiến lên online, 2 sampai 4 pemain</h2>
+  <div class="box"><label>Nama lo<input id="nm" maxlength="14" value="${esc(nm)}"></label></div>
+  <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
+  <div class="box"><label>Atau masuk pakai kode<input id="cd" maxlength="5" autocapitalize="characters" placeholder="mis. K7M2Q"></label>
+  <button id="jn" class="ghost" style="width:100%;margin-top:6px">Join room</button></div>
+  <p class="err">${esc(err)}</p>`;
+  mk.onclick = createRoom; jn.onclick = joinRoom;
+  if (rc) { document.getElementById('cd').value = rc; }
+}
+function drawLobby() {
+  const ps = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t), host = room.host === me;
+  $.innerHTML = `<h1>Ruang tunggu</h1><h2>Kasih kode ini ke temen lo</h2>
+  <div class="box"><div class="code">${code}</div></div>
+  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li>${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''}</li>`).join('')}</ul></div>
+  <div class="row">${host ? `<button id="st" ${ps.length < 2 ? 'disabled' : ''}>${ps.length < 2 ? 'Tunggu minimal 2 pemain' : 'Mulai game'}</button>` : '<p class="msg">Nunggu host mulai game...</p>'}
+  <button id="lv" class="ghost">Keluar</button></div>`;
+  if (host) st.onclick = start;
+  lv.onclick = () => leave(false);
+}
+function drawGame() {
+  const g = room.game; if (!g) return;
+  const P = room.players, hands = g.hands || {}, passed = g.passed || {}, last = g.last || null;
+  const cur = g.order[g.turn], mine = (hands[me] || []).slice().sort((a, b) => a - b);
+  const myTurn = cur === me && !g.over;
+  const opps = g.order.filter(p => p !== me).map(p => `<div class="opp ${cur === p && !g.over ? 'turn' : ''} ${passed[p] ? 'pass' : ''}">${esc(P[p]?.n || '?')}<br><b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}</div>`).join('');
+  let center;
+  if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>`;
+  else if (last) center = `<div>${esc(P[last.p]?.n)} • ${typeName[last.t]}${last.t === 'r' ? ' ' + last.n : ''}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>`;
+  else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
+  const status = g.over ? '' : myTurn ? (g.first ? 'Giliran lo. Wajib keluarin kartu 3♠.' : 'Giliran lo') : `Giliran ${esc(P[cur]?.n)}`;
+  $.innerHTML = `<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
+  <div class="opps" style="margin-top:8px">${opps}</div>
+  <div class="table">${center}</div>
+  <p class="msg">${status}</p><p class="msg err">${esc(err)}</p>
+  <div class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
+  <div class="row" style="margin-top:10px">
+  ${g.over ? (room.host === me ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
+    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>`}
+  </div></div>
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom (4 kembar) bisa potong 2</p>`;
+  lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
+  hand.onclick = e => {
+    const el = e.target.closest('.c'); if (!el) return;
+    const id = +el.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); err = ''; drawGame();
+  };
+  if (g.over) { if (room.host === me) again.onclick = start; return; }
+  pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
+}
+function leaveGame() {
+  // kalau keluar di tengah game, room dibubarkan biar nggak macet
+  if (room && room.host === me) ref.remove(); else if (ref) ref.child('game/over').set(true);
+  leave(true);
+}
+
+(function resume() {
+  const rc = localStorage.getItem('k13room');
+  if (rc) {
+    db.ref('rooms/' + rc + '/players/' + me).once('value').then(s => s.exists() ? enter(rc) : (localStorage.removeItem('k13room'), draw()));
+  } else draw();
+})();
+</script>
+</body>
+</html>
