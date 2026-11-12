@@ -620,7 +620,28 @@ $id('rfab').onclick = () => { const b = $id('rbar'); b.hidden = !b.hidden; };
 // ---------- voice chat: WebRTC antar pemain (mesh), sinyal lewat Firebase rooms/<kode>/voice + vsig ----------
 // Suara langsung HP ke HP. Firebase cuma buat "kenalan" (offer/answer/ICE), nggak ada audio yang lewat server.
 // Jaringan seluler yang ketat kadang nggak bisa nyambung cuma pakai STUN: kalau ada yang nggak kedengaran, tambahin server TURN di VOICE_ICE.
-const VOICE_ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+const VOICE_STUN = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+// TURN = server relay, wajib biar suara tembus antar jaringan beda (data seluler 5G/CGNAT, wifi kantor, dll). STUN doang sering gagal.
+// Cara gampang & gratis: daftar di metered.ca (Open Relay), bikin app, lalu isi dua baris ini:
+const TURN_APP = '';   // contoh: 'poker13' (dari poker13.metered.live)
+const TURN_KEY = '';   // API key dari dashboard metered.ca
+// atau isi manual server TURN lain di sini: [{ urls: 'turn:host:443', username: '...', credential: '...' }]
+const TURN_MANUAL = [
+  { urls: 'stun:stun.relay.metered.ca:80' },
+  { urls: 'turn:global.relay.metered.ca:80', username: 'ab597c34ed266524bbe49b26', credential: 'gy41gktZ6lA0pvU2' },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: 'ab597c34ed266524bbe49b26', credential: 'gy41gktZ6lA0pvU2' },
+  { urls: 'turn:global.relay.metered.ca:443', username: 'ab597c34ed266524bbe49b26', credential: 'gy41gktZ6lA0pvU2' },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: 'ab597c34ed266524bbe49b26', credential: 'gy41gktZ6lA0pvU2' }
+];
+let VOICE_ICE = VOICE_STUN.concat(TURN_MANUAL);
+async function loadTurn() {
+  if (!TURN_APP || !TURN_KEY) return;
+  try {
+    const r = await fetch('https://' + TURN_APP + '.metered.live/api/v1/turn/credentials?apiKey=' + encodeURIComponent(TURN_KEY));
+    const l = await r.json();
+    if (Array.isArray(l) && l.length) VOICE_ICE = VOICE_STUN.concat(TURN_MANUAL, l);
+  } catch (_) {}
+}
 const voiceOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
 let vPtt = localStorage.getItem('k13ptt') === '1', vStream = null, vMuted = false, vPeers = {}, vMembers = {}, vJoined = false, vBusy = false, vCode = null, vCtx = null, vLocal = null, vTimer = null, vShown = '', vRefs = [];
 const vpath = x => 'rooms/' + vCode + '/' + x;
@@ -652,10 +673,11 @@ function vMkPeer(q, vt) { // pemain ber-id lebih kecil yang kirim offer (biar ng
   pc.ontrack = e => {
     const st = e.streams[0]; if (!st) return;
     if (!P.audio) { const a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline', ''); document.body.appendChild(a); P.audio = a; }
-    P.audio.srcObject = st; P.audio.play().catch(() => {});
+    P.audio.srcObject = st; P.audio.play().catch(() => showToast('Voice', 'Suara ketahan browser. Tap layar sekali buat nyalain.'));
     try { if (P.A) P.A.src.disconnect(); P.A = vAnalyser(st); } catch (_) {}
   };
   pc.onconnectionstatechange = () => {
+    vUI();
     if (pc.connectionState !== 'failed') return;
     setTimeout(() => {
       if (vPeers[q] !== P || pc.connectionState !== 'failed') return;
@@ -703,6 +725,7 @@ function vTick() { // siapa yang lagi ngomong
 async function voiceJoin() {
   if (vJoined || vBusy || !code) return;
   vBusy = true;
+  await loadTurn();
   try { vStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
   catch (_) { vBusy = false; showToast('Voice', 'Mic nggak bisa dipakai. Cek izin mic di browser.'); return; }
   vBusy = false;
@@ -730,6 +753,13 @@ function voiceOff() {
   vStream = null; vLocal = null; vMembers = {}; vShown = ''; $id('vspk').hidden = true; vCode = null;
   vUI();
 }
+function vLink() { // status sambungan ke tiap pemain, buat nyari tahu kenapa suara nggak kedengaran
+  const ids = Object.keys(vMembers); if (!ids.length) return '';
+  const ok = ids.filter(q => vPeers[q] && vPeers[q].pc.connectionState === 'connected').length;
+  if (ok === ids.length) return ' • tersambung ✓';
+  const bad = ids.some(q => vPeers[q] && ['failed', 'disconnected'].includes(vPeers[q].pc.connectionState));
+  return ' • nyambung ' + ok + '/' + ids.length + (bad ? ' (gagal, jaringan butuh TURN)' : ' ...');
+}
 function vUI() {
   const f = $id('vfab'), r = $id('vrow'), ps = (room && room.players) || {};
   const avail = voiceOK && !!code && Object.keys(ps).length >= 2 && !Object.values(ps).some(p => p && p.bot); // cuma room sesama manusia
@@ -738,7 +768,7 @@ function vUI() {
   f.className = 'fab vfab' + (vJoined ? (vPtt ? ' ptt' + (vMuted ? '' : ' on') : (vMuted ? ' mute' : ' on')) : '');
   $id('vptt').textContent = vPtt ? 'Mode: tahan ngomong' : 'Mode: open mic';
   r.hidden = !vJoined;
-  $id('vst').textContent = vJoined ? (vPtt ? (vMuted ? 'Tahan tombol ✋ buat ngomong' : 'Lagi ngomong...') : (vMuted ? 'Mic lo mati, tap 🔇 buat nyalain' : 'Mic lo nyala, tap 🎙️ buat mute')) + ' • ' + (Object.keys(vMembers).length + 1) + ' orang di voice' : '';
+  $id('vst').textContent = vJoined ? (vPtt ? (vMuted ? 'Tahan tombol ✋ buat ngomong' : 'Lagi ngomong...') : (vMuted ? 'Mic lo mati, tap 🔇 buat nyalain' : 'Mic lo nyala, tap 🎙️ buat mute')) + ' • ' + (Object.keys(vMembers).length + 1) + ' orang di voice' + vLink() : '';
 }
 function vSetMute(m) { vMuted = m; if (vStream) vStream.getAudioTracks().forEach(t => { t.enabled = !vMuted; }); vUI(); }
 $id('vfab').onclick = () => {
@@ -755,6 +785,9 @@ $id('vptt').onclick = () => {
   vSetMute(vPtt); // PTT: mulai mute; open mic: langsung nyala
 };
 $id('vleave').onclick = voiceOff;
+function vKick() { if (!vJoined) return; try { if (vCtx && vCtx.state === 'suspended') vCtx.resume(); } catch (_) {} Object.values(vPeers).forEach(P => { if (P.audio && P.audio.paused && P.audio.srcObject) P.audio.play().catch(() => {}); }); }
+document.addEventListener('pointerdown', vKick, { passive: true });
+setInterval(() => { if (vJoined) vUI(); }, 2000); // refresh status koneksi
 
 // ---------- presence: ping server, ping pemain, status AFK ----------
 // rooms/<kode>/presence/<pid> = { online, seen (heartbeat 5 dtk), ping (ms), hid (waktu pindah tab), off (waktu putus) }
