@@ -60,12 +60,19 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .badge[hidden],.toast[hidden]{display:none}
 .cin{margin-top:8px;flex-wrap:nowrap}.cin input{margin:0;flex:1;min-width:0}.cin button{flex:0 0 auto}
 li{margin:4px 0}
+.srv{position:fixed;left:10px;top:calc(8px + env(safe-area-inset-top,0px));z-index:21;padding:3px 10px;border-radius:999px;background:#000b;border:1px solid #ffffff22;font:.75rem/1.4 system-ui,sans-serif;pointer-events:none;white-space:nowrap}
+.pd{font:.72rem/1.3 system-ui,sans-serif;margin-left:6px;white-space:nowrap}
+.opp .pd{display:block;margin:2px 0 0}
+.p-on{color:#7be3a0}.p-mid{color:#f0c24b}.p-bad{color:#ff8c80}.p-off{color:#8a9096}.p-away{color:#9fb7ff}.p-bot{color:var(--mute)}
+.sg{width:13px;height:11px;vertical-align:-1px;fill:currentColor;margin-right:4px}
+.pw{text-align:center;font:.72rem/1.4 system-ui,sans-serif;color:var(--mute);padding:4px 16px 76px}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
 @media(prefers-reduced-motion:reduce){.hand .c{transition:none}}
 </style>
 </head>
 <body>
 <div class="bar"><button id="tm" class="ghost"></button><button id="ts" class="ghost"></button></div>
+<div id="srv" class="srv p-on" role="status" aria-label="Status server">● ...</div>
 <main id="app"></main>
 <section id="chat" class="chat" hidden>
   <b class="ht">💬 Chat room</b>
@@ -73,6 +80,7 @@ li{margin:4px 0}
   <div class="chips" id="chips"></div>
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
 </section>
+<footer class="pw">Powered by GitHub and Claude AI</footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
 
@@ -363,7 +371,7 @@ const botDecide = lv => lv === 0 ? Math.random() < .5 : true; // murni: bot Muda
 // ---------- state lokal ----------
 let me = localStorage.getItem('k13pid');
 if (!me) { me = 'p' + Math.random().toString(36).slice(2, 10); localStorage.setItem('k13pid', me); }
-let lastLog = -1, code = null, room = null, ref = null, sel = new Set(), err = '';
+let lastLog = -1, code = null, room = null, ref = null, sel = new Set(), err = '', sig = '';
 
 function setErr(m) { err = m; draw(); }
 function genCode() {
@@ -401,26 +409,32 @@ async function joinRoom() {
   enter(c);
 }
 function enter(c) {
-  lastLog = -1; code = c; err = ''; sel.clear();
+  lastLog = -1; code = c; err = ''; sel.clear(); sig = '';
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
   chatOn(c);
+  presOn();
   ref.on('value', s => {
     room = s.val();
     if (!room || !(room.players || {})[me]) { leave(true); return; }
-    draw();
+    pres = room.presence || {};
+    // presence (heartbeat) dan chat nggak perlu gambar ulang seluruh meja: cukup update penanda
+    const { presence, chat, ...rest } = room, ns = JSON.stringify(rest);
+    if (ns !== sig) { sig = ns; draw(); } else paintPres();
     botTick();
   });
 }
 function leave(silent) {
   clearTimeout(botT); botT = null;
+  presOff(); sig = '';
   if (ref) ref.off();
   chatOff();
   if (!silent && room && room.status === 'lobby') {
-    if (room.host === me) ref.remove(); else ref.child('players/' + me).remove();
+    if (room.host === me) ref.remove(); else { ref.child('players/' + me).remove(); ref.child('presence/' + me).remove(); }
   }
   localStorage.removeItem('k13room');
   lastLog = -1; code = room = ref = null; sel.clear(); draw();
+  setTimeout(probe, 300);
 }
 function start() {
   const pids = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t).map(x => x[0]);
@@ -429,21 +443,33 @@ function start() {
   const lead = pg && pg.over && !pg.bomb && pg.fin && pids.includes(pg.fin[0]) ? pg.fin[0] : null;
   ref.update({ status: 'play', game: deal(pids, lead) });
 }
-// driver bot: cuma host yang menjalankan bot (bot = pemain dengan flag bot di room.players)
+// driver bot: satu pemain manusia yang online (host dulu, kalau host AFK pindah ke pemain berikutnya) menjalankan bot.
+// Bot = pemain dengan flag bot di room.players, ATAU pemain manusia yang AFK (putus / tutup browser / pindah tab lama).
 let botT = null;
 const isBot = p => !!((room && room.players || {})[p] || {}).bot;
+const humans = () => Object.values((room && room.players) || {}).filter(p => !p.bot).length;
+const isAfk = p => !isBot(p) && humans() > 1 && pinfo(p).s === 'afk'; // cuma di room multi-pemain, kalau sendirian nggak ada yang ngambil alih
+const auto = p => isBot(p) || isAfk(p);
+function driver() {
+  if (!room) return null;
+  const ps = room.players || {};
+  const ids = Object.keys(ps).filter(id => !ps[id].bot).sort((x, y) => x === room.host ? -1 : y === room.host ? 1 : ps[x].t - ps[y].t);
+  return ids.find(id => id === me || !isAfk(id)) || null;
+}
+const hostNow = () => driver() === me; // "host efektif": host asli kalau masih aktif, kalau nggak pemain aktif berikutnya
 function botTick() {
-  if (!room || !room.bot || room.host !== me || room.status === 'lobby' || botT) return;
+  if (!room || room.status === 'lobby' || botT || !conn || Date.now() - connAt < 3000) return; // jeda 3 dtk habis reconnect: tunggu data presence segar
   const g = room.game; if (!g || g.over || g.v !== VER) return;
-  const lv = room.bot.lv | 0, dec = g.dec || {}, bd = Object.keys(dec).find(isBot);
-  if (bd) { botT = setTimeout(() => { botT = null; ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : decide(x, bd, botDecide(lv)), () => botTick(), false); }, 600); return; }
-  if (Object.keys(dec).length) return; // nunggu pemain murni (manusia) memilih
+  if (driver() !== me) return;
+  const lv = room.bot ? room.bot.lv | 0 : 2, dec = g.dec || {}, bd = Object.keys(dec).find(p => p !== me && auto(p));
+  if (bd) { botT = setTimeout(() => { botT = null; if (!auto(bd) || driver() !== me) return botTick(); const stop = isBot(bd) ? botDecide(lv) : false; ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : decide(x, bd, stop), () => botTick(), false); }, 600); return; }
+  if (Object.keys(dec).length) return; // nunggu pemain murni (manusia yang masih aktif) memilih
   const cur = g.order[g.turn];
-  if (!isBot(cur) || (g.fin || []).includes(cur)) return;
+  if (cur === me || !auto(cur) || (g.fin || []).includes(cur)) return;
   botT = setTimeout(() => {
     botT = null;
     const g2 = room && room.game;
-    if (!g2 || g2.over || g2.order[g2.turn] !== cur) return botTick();
+    if (!g2 || g2.over || g2.order[g2.turn] !== cur || !auto(cur) || driver() !== me) return botTick(); // pemain udah balik / giliran udah pindah
     const m = botMove(g2, cur, lv);
     const run = (cards, pass, next) => ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : move(x, cur, cards, pass), (e, ok) => { if (!ok && next) next(); else botTick(); }, false);
     run(m.cards || [], !!m.pass, () => run([], true, () => run([Math.min(...(g2.hands[cur] || [0]))], false))); // cadangan: lewat, lalu kartu terkecil
@@ -535,6 +561,103 @@ QUICK.forEach(t => { const b = document.createElement('button'); b.className = '
 $id('cfab').onclick = () => { $id('chat').scrollIntoView({ behavior: 'smooth', block: 'end' }); unread = 0; setBadge(); $id('ctoast').hidden = true; };
 $id('ctoast').onclick = () => $id('cfab').onclick();
 addEventListener('scroll', () => { if (unread && chatInView()) { unread = 0; setBadge(); } }, { passive: true });
+
+// ---------- presence: ping server, ping pemain, status AFK ----------
+// rooms/<kode>/presence/<pid> = { online, seen (heartbeat 5 dtk), ping (ms), hid (waktu pindah tab), off (waktu putus) }
+// putus / tutup browser dideteksi server lewat onDisconnect, jadi tetap jalan walau tab sudah mati.
+const TS = firebase.database.ServerValue.TIMESTAMP;
+const SRV_STALE = 25000, AFK_GRACE = 8000, AWAY_MAX = 20000; // heartbeat basi / jeda sebelum bot ambil alih / pindah tab maksimal (ms)
+let conn = false, connAt = 0, myPing = null, svOff = 0, pres = {}, hbT = null, tickT = null, hidAt = 0, lastDrv = null;
+const nowS = () => Date.now() + svOff;
+db.ref('.info/serverTimeOffset').on('value', s => { svOff = s.val() || 0; });
+db.ref('.info/connected').on('value', s => {
+  conn = !!s.val();
+  if (conn) connAt = Date.now();
+  if (!conn) myPing = null;
+  paintSrv();
+  if (conn && ref) presUp();
+  probe();
+  botTick();
+});
+function presUp() { // daftar onDisconnect dulu, baru tandai online
+  if (!ref) return;
+  ref.child('presence/' + me).onDisconnect().update({ online: false, off: TS }).then(beat);
+}
+function beat() {
+  if (!ref || !conn) return;
+  const t0 = Date.now(), h = document.hidden;
+  if (h) { if (!hidAt) hidAt = nowS(); } else hidAt = 0;
+  ref.child('presence/' + me).update({ online: true, seen: TS, ping: myPing, hid: h ? hidAt : null }, e => {
+    if (e) return;
+    if (!h) myPing = Date.now() - t0; // ping = waktu sampai server balas konfirmasi tulis
+    paintPres();
+  });
+}
+function tick() {
+  if (!room) return;
+  paintPres();
+  const d = driver();
+  if (d !== lastDrv) { lastDrv = d; if (room.game && room.game.over) draw(); } // host efektif berubah: tombol "Main lagi" ikut pindah
+  botTick();
+}
+function presOn() {
+  presOff();
+  hbT = setInterval(beat, 5000); tickT = setInterval(tick, 2000);
+  if (conn) presUp();
+}
+function presOff() {
+  clearInterval(hbT); clearInterval(tickT); hbT = tickT = null;
+  if (ref) ref.child('presence/' + me).onDisconnect().cancel();
+  pres = {}; myPing = null; hidAt = 0; lastDrv = null;
+}
+document.addEventListener('visibilitychange', beat);
+function pinfo(pid) { // s: bot | on | away (pindah tab) | off (putus, masih masa tunggu) | afk (bot ambil alih)
+  if (isBot(pid)) return { s: 'bot' };
+  const pr = pres[pid];
+  if (!pr || (!pr.seen && pr.online !== false)) return { s: 'on' };
+  const n = nowS();
+  let since = 0;
+  if (pr.online === false) since = pr.off || pr.seen;
+  else if (!pr.hid && n - pr.seen > SRV_STALE) since = pr.seen + SRV_STALE;
+  if (since) return { s: n - since > AFK_GRACE ? 'afk' : 'off', ping: pr.ping };
+  if (pr.hid) return { s: n - pr.hid > AWAY_MAX ? 'afk' : 'away', ping: pr.ping };
+  return { s: 'on', ping: pr.ping };
+}
+const pingCls = ms => ms < 120 ? 'p-on' : ms < 300 ? 'p-mid' : 'p-bad', pingLv = ms => ms < 120 ? 3 : ms < 300 ? 2 : 1;
+const sigSvg = n => `<svg class="sg" viewBox="0 0 13 12" aria-hidden="true">${[0, 1, 2].map(i => `<rect x="${i * 5}" y="${8 - i * 4}" width="3" height="${4 + i * 4}" rx=".8" opacity="${i < n ? 1 : .25}"/>`).join('')}</svg>`;
+function pdTxt(pid) { // [kelas warna, teks, jumlah batang sinyal 0-3]
+  if (pid === me && !conn) return ['p-off', 'offline', 0];
+  const i = pinfo(pid);
+  if (i.s === 'bot') return ['p-bot', '🤖 bot', -1];
+  if (i.s === 'afk') return ['p-off', room && room.status !== 'lobby' && humans() > 1 ? 'offline · bot' : 'offline', 0];
+  if (i.s === 'off') return ['p-off', 'putus...', 0];
+  const pg = pid === me ? myPing : i.ping;
+  if (i.s === 'away') return ['p-away', '🌙 pindah tab', pg == null ? 0 : pingLv(pg)];
+  return pg == null ? ['p-on', 'online', 3] : [pingCls(pg), pg + ' ms', pingLv(pg)];
+}
+const pdIn = ([c, t, l]) => (l >= 0 ? sigSvg(l) : '') + t;
+const pdHTML = pid => { const d = pdTxt(pid); return `<span class="pd ${d[0]}" data-pid="${pid}" data-k="${esc(d.join('|'))}">${pdIn(d)}</span>`; };
+function paintPres() {
+  if (room) document.querySelectorAll('.pd').forEach(el => { const d = pdTxt(el.dataset.pid), k = d.join('|'); el.className = 'pd ' + d[0]; if (el.dataset.k !== k) { el.dataset.k = k; el.innerHTML = pdIn(d); } });
+  paintSrv();
+}
+function paintSrv() {
+  const e = $id('srv'); if (!e) return;
+  let d;
+  if (!conn) d = ['p-off', 'Offline', 0];
+  else if (myPing != null) d = [pingCls(myPing), myPing + ' ms', pingLv(myPing)];
+  else d = ['p-on', 'Online', 3];
+  const k = d.join('|');
+  e.className = 'srv ' + d[0];
+  if (e.dataset.k !== k) { e.dataset.k = k; e.innerHTML = pdIn(d); }
+}
+// ping server di luar room: baca path kosong tanpa listener (selalu ke server), waktunya = ping. Error izin pun tetap dihitung.
+function probe() {
+  if (!conn || ref || document.hidden) return;
+  const t0 = Date.now(), done = () => { if (!ref && conn) { myPing = Date.now() - t0; paintSrv(); } };
+  db.ref('rooms/_ping').once('value').then(done, done);
+}
+setInterval(probe, 5000);
 
 // ---------- audio: musik ambient abad pertengahan (sintesis WebAudio, tanpa file) + efek suara ----------
 const Snd = (() => {
@@ -698,7 +821,7 @@ function drawLobby() {
   const ps = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t), host = room.host === me;
   $.innerHTML = `<h1>Ruang tunggu</h1><h2>Kasih kode ini ke temen lo</h2>
   <div class="box"><div class="code">${code}</div></div>
-  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li>${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''}</li>`).join('')}</ul></div>
+  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li>${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''} ${pdHTML(id)}</li>`).join('')}</ul></div>
   <div class="row">${host ? `<button id="st" ${ps.length < 2 ? 'disabled' : ''}>${ps.length < 2 ? 'Tunggu minimal 2 pemain' : 'Mulai game'}</button>` : '<p class="msg">Nunggu host mulai game...</p>'}
   <button id="lv" class="ghost">Keluar</button></div>`;
   if (host) st.onclick = start;
@@ -714,7 +837,7 @@ function drawGame() {
   const cur = g.order[g.turn], mine = (hands[me] || []).slice().sort((a, b) => a - b);
   const myTurn = cur === me && !g.over && !pend && !fin.includes(me);
   const mi = g.order.indexOf(me), after = g.order.map((_, k) => g.order[(mi + 1 + k) % g.order.length]).slice(0, g.order.length - 1).reverse(); // pemain berikutnya ada di paling kanan
-  const opps = after.map(p => `<div class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}<br>${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
+  const opps = after.map(p => `<div class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
   const BL = l => l.t === 'r' ? 'seri ' + l.n + ' satu logo' : ({ q: '4 kembar', g: '4 kembar + pasangan', x: 'seri 5 satu logo + pasangan', d: '8 kartu kembar (2 x 4 kembar)' }[l.t] || 'bom');
   let center;
   if (g.quad2) center = `<div class="win">${g.quad2 === me ? 'Lo' : esc(P[g.quad2]?.n || '?')} dapat 4 kartu 2, kalah instan</div><div>Game diulang dari fase kumpulin 3.</div>`;
@@ -733,7 +856,7 @@ function drawGame() {
   ${dec[me] ? `<div class="box"><b>Kartu murni!</b> Lo nggak dapat J, Q, K sama sekali. Berhenti sekarang = juara instan, atau lanjut main.<div class="row" style="margin-top:8px"><button id="bh">Berhenti, juara</button><button id="kt" class="ghost">Lanjut main</button></div></div>` : ''}
   <div class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
   <div class="row" style="margin-top:10px">
-  ${g.over ? (room.host === me ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
+  ${g.over ? (hostNow() ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${cardsOf(e.c, 'mini')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
@@ -744,13 +867,14 @@ function drawGame() {
     const id = +el.dataset.id, up = !sel.has(id); Snd.tick(up); up ? sel.add(id) : sel.delete(id); err = ''; drawGame();
   };
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
-  if (g.over) { if (room.host === me) again.onclick = start; return; }
+  if (g.over) { if (hostNow()) again.onclick = start; return; }
   if (g.first && myTurn) a3.onclick = () => { sel.clear(); mine.filter(c => rk(c) === 0).forEach(c => sel.add(c)); drawGame(); };
   pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
 }
 function leaveGame() {
-  // kalau keluar di tengah game, room dibubarkan biar nggak macet
-  if (room && room.host === me) ref.remove(); else if (ref) ref.child('game/over').set(true);
+  // keluar di tengah game: game tetap lanjut, kursi lo langsung dipegang bot (AFK). Room cuma dibubarkan kalau nggak ada manusia lain.
+  if (ref && room && humans() <= 1) ref.remove();
+  else if (ref) ref.child('presence/' + me).update({ online: false, off: TS });
   leave(true);
 }
 
