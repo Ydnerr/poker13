@@ -82,7 +82,7 @@ function ev(cs) {
   if (!n) return null;
   const r = c.map(rk), top = c[n - 1];
   if (n <= 4 && r.every(x => x === r[0])) return { t: ['', 's', 'p', 't', 'q'][n], n, k: top };
-  if (n >= 3 && r[n - 1] < 12 && r.every((x, i) => !i || x === r[i - 1] + 1)) return { t: 'r', n, k: top };
+  if (n >= 3 && r[n - 1] < 12 && r.every((x, i) => !i || x === r[i - 1] + 1) && c.every(x => su(x) === su(c[0]))) return { t: 'r', n, k: top }; // seri wajib satu logo
   if (n === 5) { // 3 kembar + pasangan (full house), dibandingkan lewat angka 3 kembarnya
     const m = {}; c.forEach(x => (m[rk(x)] = m[rk(x)] || []).push(x));
     const gs = Object.values(m), tri = gs.find(a => a.length === 3);
@@ -306,7 +306,7 @@ function why(g, cards) {
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan lo. Coba refresh halaman.';
   if (g.first) { const m3 = hand.filter(c => rk(c) === 0); return cards.length === m3.length && m3.every(c => cards.includes(c)) ? '' : 'Fase kumpulin 3: keluarin semua kartu 3 lo sekaligus (' + m3.length + ' kartu).'; }
   if (bombOf(cards)) return '';
-  if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Contoh yang boleh: seri 3+ kartu (tanpa 2), 3 kembar + pasangan, seri satu logo + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
+  if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Seri harus satu logo semua (3+ kartu berurutan, tanpa 2). Lainnya: pasangan, 3 kembar, 3 kembar + pasangan, seri + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
   if (e.t === 'q' || (e.t === 'r' && e.n === 5 && cards.every(c => su(c) === su(cards[0])))) return '';
   if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x') ? '3 kembar/seri dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
@@ -322,7 +322,7 @@ function play(pass) {
 
 // ---------- tampilan ----------
 const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}<b>${S[su(id)]}</b></div>`;
-const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
+const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
   if (!room) return drawHome();
@@ -378,7 +378,7 @@ function drawGame() {
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Bom 4 kembar atau seri 5 satu logo = langsung menang • 3 kembar + pasangan dan seri satu logo (min 3) + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Seri harus satu logo semua (min 3 kartu) • Bom 4 kembar atau seri 5 kartu = langsung menang • 3 kembar + pasangan dan seri + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
