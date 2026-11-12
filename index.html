@@ -36,12 +36,6 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .me{padding:10px;border-radius:12px;border:1px solid transparent}
 .msg{color:var(--mute);min-height:1.4em;text-align:center}
 .err{color:#ff9d92}
-.hist{margin-top:14px;border:1px solid #ffffff22;border-radius:10px;padding:8px 12px;background:#0000002e}
-.hist .ht{color:var(--gold);display:block}
-.hl{max-height:260px;overflow:auto;margin-top:6px}
-.he{display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #ffffff14}
-.he>span:first-child{min-width:72px;color:var(--mute)}
-.he i{color:var(--mute)}
 .c.mini{width:30px;height:42px;font-size:.72rem;margin:0 -2px 0 0;padding:2px 3px;border-radius:4px}
 .c.mini b{display:none}
 .c b.f{margin-top:2px;line-height:1}.c b.f svg{width:26px;height:26px;display:block;margin:0 auto}.c b.f i{display:block;font-style:normal;font-size:.8rem;line-height:1;text-align:center;margin-top:1px}
@@ -58,6 +52,16 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:.72rem;line-height:18px;font-weight:bold}
 .toast{position:fixed;left:12px;right:70px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:19;background:#000d;border:1px solid var(--gold);border-radius:12px;padding:8px 12px;font-size:.92rem;cursor:pointer;word-break:break-word}
 .badge[hidden],.toast[hidden]{display:none}
+.vfab{bottom:calc(70px + env(safe-area-inset-bottom,0px))}.vfab.on{box-shadow:0 0 0 3px #7be3a0,0 2px 10px #0008}.vfab.mute{background:var(--red);color:#fff}
+.vspk{position:fixed;left:10px;top:calc(38px + env(safe-area-inset-top,0px));z-index:21;max-width:70vw;padding:3px 10px;border-radius:999px;background:#000b;border:1px solid #7be3a055;color:#7be3a0;font:.75rem/1.4 system-ui,sans-serif;pointer-events:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vspk[hidden]{display:none}
+.vfab{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}.vfab.ptt{box-shadow:0 0 0 3px var(--gold),0 2px 10px #0008}.vfab.ptt.on{background:#7be3a0;color:#10261c;box-shadow:0 0 0 4px #7be3a0,0 2px 10px #0008}
+.rfab{bottom:calc(126px + env(safe-area-inset-bottom,0px))}
+.rbar{position:fixed;right:66px;bottom:calc(126px + env(safe-area-inset-bottom,0px));z-index:22;display:flex;gap:4px;padding:5px 8px;border-radius:999px;background:#000d;border:1px solid var(--gold);max-width:calc(100vw - 80px);overflow-x:auto}
+.rbar[hidden]{display:none}.rbar button{background:transparent;border:0;padding:2px 5px;font-size:1.5rem;line-height:1;border-radius:8px}.rbar button:active{transform:scale(1.3)}
+.rx{position:fixed;z-index:30;pointer-events:none;text-align:center;font:.7rem/1.2 system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px #000;animation:rxup 2.4s ease-out forwards}.rx i{display:block;font-style:normal;font-size:2.4rem;line-height:1.1}
+@keyframes rxup{0%{transform:translateY(0) scale(.6);opacity:0}12%{transform:translateY(-20px) scale(1.15);opacity:1}100%{transform:translateY(-260px) scale(1);opacity:0}}
+.talk{box-shadow:0 0 0 2px #7be3a0,0 0 14px #7be3a088!important;border-color:#7be3a0!important}.pd.talk{box-shadow:none!important}.sp{margin-left:4px}
 .cin{margin-top:8px;flex-wrap:nowrap}.cin input{margin:0;flex:1;min-width:0}.cin button{flex:0 0 auto}
 li{margin:4px 0}
 .srv{position:fixed;left:10px;top:calc(8px + env(safe-area-inset-top,0px));z-index:21;padding:3px 10px;border-radius:999px;background:#000b;border:1px solid #ffffff22;font:.75rem/1.4 system-ui,sans-serif;pointer-events:none;white-space:nowrap}
@@ -67,7 +71,7 @@ li{margin:4px 0}
 .sg{width:13px;height:11px;vertical-align:-1px;fill:currentColor;margin-right:4px}
 .pw{text-align:center;font:.72rem/1.4 system-ui,sans-serif;color:var(--mute);padding:4px 16px 76px}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
-@media(prefers-reduced-motion:reduce){.hand .c{transition:none}}
+@media(prefers-reduced-motion:reduce){.hand .c{transition:none}.rx{animation:rxfade 2.4s linear forwards}@keyframes rxfade{0%{opacity:0}10%{opacity:1}100%{opacity:0}}}
 </style>
 </head>
 <body>
@@ -77,12 +81,18 @@ li{margin:4px 0}
 <section id="chat" class="chat" hidden>
   <b class="ht">💬 Chat room</b>
   <div id="cmsg" class="cmsg" role="log" aria-live="polite"></div>
+  <div id="vrow" class="row" style="margin:0 0 8px;align-items:center" hidden><span id="vst" class="msg" style="flex:1;text-align:left;margin:0;font-size:.85rem"></span><button id="vptt" class="ghost chip">Mode: open mic</button><button id="vleave" class="ghost chip">Keluar voice</button></div>
   <div class="chips" id="chips"></div>
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
+  <p id="gdesc" class="msg" style="font-size:.85rem;margin:14px 0 0">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Habis kartu pakai 2 = ngebom diri sendiri, kalah, game diulang dari kumpulin 3 • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • <span id="gver"></span></p>
 </section>
 <footer class="pw">Powered by GitHub and Claude AI</footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
+<button id="vfab" class="fab vfab" hidden aria-label="Voice chat">🎤</button>
+<div id="vspk" class="vspk" hidden></div>
+<button id="rfab" class="fab rfab" hidden aria-label="Reaksi emoji">😎</button>
+<div id="rbar" class="rbar" hidden role="toolbar" aria-label="Reaksi emoji"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -102,7 +112,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v28'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v30'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -229,6 +240,11 @@ function move(g, pid, cards, pass) {
   if (cut) { // bom menimpa kartu 2: game langsung berakhir, pengeluar bom menang
     g.last = { p: pid, c: sorted, t: e.t, n: e.n, k: e.k, k2: e.k2 ?? 0 };
     g.over = true; g.winner = pid; g.bomb = true; g.fin = [pid];
+    return g;
+  }
+  if (!g.hands[pid].length && cards.some(c => rk(c) === 12)) { // habis kartu pakai 2 = ngebom diri sendiri: pemainnya kalah, game batal (nggak ada pemenang), ulang dari kumpulin 3
+    g.last = { p: pid, c: sorted, t: e.t, n: e.n, k: e.k, k2: e.k2 ?? 0 };
+    g.over = true; g.winner = null; g.self2 = pid; g.fin = []; g.dec = null;
     return g;
   }
   g.last = { p: pid, c: sorted, t: e.t, n: e.n, k: e.k, k2: e.k2 ?? 0 };
@@ -413,27 +429,29 @@ function enter(c) {
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
   chatOn(c);
+  reactOn(c);
   presOn();
   ref.on('value', s => {
     room = s.val();
     if (!room || !(room.players || {})[me]) { leave(true); return; }
     pres = room.presence || {};
     // presence (heartbeat) dan chat nggak perlu gambar ulang seluruh meja: cukup update penanda
-    const { presence, chat, ...rest } = room, ns = JSON.stringify(rest);
+    const { presence, chat, voice, vsig, react, ...rest } = room, ns = JSON.stringify(rest);
     if (ns !== sig) { sig = ns; draw(); } else paintPres();
     botTick();
+    vUI();
   });
 }
 function leave(silent) {
   clearTimeout(botT); botT = null;
   presOff(); sig = '';
   if (ref) ref.off();
-  chatOff();
+  chatOff(); reactOff(); voiceOff();
   if (!silent && room && room.status === 'lobby') {
     if (room.host === me) ref.remove(); else { ref.child('players/' + me).remove(); ref.child('presence/' + me).remove(); }
   }
   localStorage.removeItem('k13room');
-  lastLog = -1; code = room = ref = null; sel.clear(); draw();
+  lastLog = -1; code = room = ref = null; sel.clear(); draw(); vUI();
   setTimeout(probe, 300);
 }
 function start() {
@@ -561,6 +579,182 @@ QUICK.forEach(t => { const b = document.createElement('button'); b.className = '
 $id('cfab').onclick = () => { $id('chat').scrollIntoView({ behavior: 'smooth', block: 'end' }); unread = 0; setBadge(); $id('ctoast').hidden = true; };
 $id('ctoast').onclick = () => $id('cfab').onclick();
 addEventListener('scroll', () => { if (unread && chatInView()) { unread = 0; setBadge(); } }, { passive: true });
+
+// ---------- reaksi emoji: rooms/<kode>/react (efek melayang, nggak disimpan lama) ----------
+const REACT = ['😂', '🔥', '👏', '😭', '😡', '🤡', '💀', '👀'];
+let reactRef = null, reactReady = false, lastReact = 0;
+function floatReact(n, e) {
+  const el = document.createElement('div'); el.className = 'rx';
+  el.style.left = (12 + Math.random() * (innerWidth - 90)) + 'px'; el.style.bottom = (110 + Math.random() * 60) + 'px';
+  el.innerHTML = '<i>' + esc(e) + '</i>' + esc(n || '');
+  document.body.appendChild(el); setTimeout(() => el.remove(), 2500);
+}
+function reactOn(c) {
+  reactOff(); reactReady = false;
+  reactRef = db.ref('rooms/' + c + '/react').limitToLast(1);
+  reactRef.on('child_added', s => {
+    const m = s.val();
+    if (!reactReady || !m || !REACT.includes(m.e)) return;
+    floatReact(m.p === me ? 'Lo' : m.n, m.e);
+    if (m.p !== me) Snd.msg();
+  });
+  reactRef.once('value').then(() => { reactReady = true; });
+  $id('rfab').hidden = false;
+}
+function reactOff() {
+  if (reactRef) reactRef.off();
+  reactRef = null; reactReady = false;
+  $id('rfab').hidden = true; $id('rbar').hidden = true;
+}
+function sendReact(e) {
+  if (!code || Date.now() - lastReact < 400) return;
+  lastReact = Date.now();
+  const name = (room && room.players && room.players[me] && room.players[me].n) || localStorage.getItem('k13name') || '?';
+  const r = db.ref('rooms/' + code + '/react').push({ p: me, n: name, e });
+  setTimeout(() => r.remove().catch(() => {}), 8000);
+  $id('rbar').hidden = true;
+}
+REACT.forEach(e => { const b = document.createElement('button'); b.textContent = e; b.setAttribute('aria-label', 'Kirim ' + e); b.onclick = () => sendReact(e); $id('rbar').appendChild(b); });
+$id('rfab').onclick = () => { const b = $id('rbar'); b.hidden = !b.hidden; };
+
+// ---------- voice chat: WebRTC antar pemain (mesh), sinyal lewat Firebase rooms/<kode>/voice + vsig ----------
+// Suara langsung HP ke HP. Firebase cuma buat "kenalan" (offer/answer/ICE), nggak ada audio yang lewat server.
+// Jaringan seluler yang ketat kadang nggak bisa nyambung cuma pakai STUN: kalau ada yang nggak kedengaran, tambahin server TURN di VOICE_ICE.
+const VOICE_ICE = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
+const voiceOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
+let vPtt = localStorage.getItem('k13ptt') === '1', vStream = null, vMuted = false, vPeers = {}, vMembers = {}, vJoined = false, vBusy = false, vCode = null, vCtx = null, vLocal = null, vTimer = null, vShown = '', vRefs = [];
+const vpath = x => 'rooms/' + vCode + '/' + x;
+function vAnalyser(stream) {
+  vCtx = vCtx || new (window.AudioContext || window.webkitAudioContext)();
+  const src = vCtx.createMediaStreamSource(stream), an = vCtx.createAnalyser();
+  an.fftSize = 512; src.connect(an);
+  return { an, src, buf: new Uint8Array(an.fftSize) };
+}
+function vLevel(A) {
+  A.an.getByteTimeDomainData(A.buf);
+  let t = 0; for (let i = 0; i < A.buf.length; i++) { const d = (A.buf[i] - 128) / 128; t += d * d; }
+  return Math.sqrt(t / A.buf.length);
+}
+function vSend(to, k, d) { if (vCode) db.ref(vpath('vsig/' + to)).push({ f: me, k, d: JSON.stringify(d) }); }
+function vDrop(q) {
+  const P = vPeers[q]; if (!P) return;
+  delete vPeers[q];
+  try { P.pc.close(); } catch (_) {}
+  if (P.audio) { P.audio.srcObject = null; P.audio.remove(); }
+  try { if (P.A) P.A.src.disconnect(); } catch (_) {}
+}
+function vMkPeer(q, vt) { // pemain ber-id lebih kecil yang kirim offer (biar nggak tabrakan)
+  vDrop(q);
+  const pc = new RTCPeerConnection({ iceServers: VOICE_ICE }), P = { pc, vt, q: Promise.resolve(), audio: null, A: null };
+  vPeers[q] = P;
+  vStream.getTracks().forEach(t => pc.addTrack(t, vStream));
+  pc.onicecandidate = e => { if (e.candidate) vSend(q, 'ice', e.candidate.toJSON()); };
+  pc.ontrack = e => {
+    const st = e.streams[0]; if (!st) return;
+    if (!P.audio) { const a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline', ''); document.body.appendChild(a); P.audio = a; }
+    P.audio.srcObject = st; P.audio.play().catch(() => {});
+    try { if (P.A) P.A.src.disconnect(); P.A = vAnalyser(st); } catch (_) {}
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState !== 'failed') return;
+    setTimeout(() => {
+      if (vPeers[q] !== P || pc.connectionState !== 'failed') return;
+      vDrop(q); if (me < q && vMembers[q]) vMkPeer(q, vMembers[q]);
+    }, 1500);
+  };
+  if (me < q) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => vSend(q, 'offer', pc.localDescription.toJSON())).catch(() => {});
+  return P;
+}
+function vOnSig(snap) {
+  const m = snap.val(); snap.ref.remove();
+  if (!m || !vJoined || !m.f || m.f === me) return;
+  let d; try { d = JSON.parse(m.d); } catch (_) { return; }
+  let P = vPeers[m.f];
+  if (m.k === 'offer') {
+    if (!P || P.pc.remoteDescription) P = vMkPeer(m.f, vMembers[m.f] || 0);
+    P.q = P.q.then(async () => { await P.pc.setRemoteDescription(d); await P.pc.setLocalDescription(await P.pc.createAnswer()); vSend(m.f, 'answer', P.pc.localDescription.toJSON()); }).catch(() => {});
+  } else if (P && m.k === 'answer') P.q = P.q.then(() => P.pc.setRemoteDescription(d)).catch(() => {});
+  else if (P && m.k === 'ice') P.q = P.q.then(() => P.pc.addIceCandidate(d)).catch(() => {});
+}
+function vSync(snap) { // daftar pemain yang lagi di voice berubah
+  const v = snap.val() || {}; vMembers = {};
+  Object.keys(v).forEach(k => { if (k !== me) vMembers[k] = (v[k] && v[k].t) || 1; });
+  Object.keys(vPeers).forEach(q => {
+    const P = vPeers[q];
+    if (!vMembers[q]) vDrop(q);
+    else if (P.vt && P.vt !== vMembers[q]) { vDrop(q); if (me < q) vMkPeer(q, vMembers[q]); } // dia keluar lalu masuk lagi: sambungan baru
+    else if (!P.vt) P.vt = vMembers[q];
+  });
+  Object.keys(vMembers).forEach(q => { if (!vPeers[q] && me < q) vMkPeer(q, vMembers[q]); });
+  vUI();
+}
+function vTick() { // siapa yang lagi ngomong
+  const names = [], nm = p => ((room && room.players && room.players[p]) || {}).n || '?';
+  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .04) names.push('Lo');
+  Object.keys(vPeers).forEach(q => { const P = vPeers[q]; if (P.A && vLevel(P.A) > .03) names.push(nm(q)); });
+  const txt = names.length ? '🔊 ' + names.join(', ') : '';
+  const ids = [];
+  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .04) ids.push(me);
+  Object.keys(vPeers).forEach(q => { const P = vPeers[q]; if (P.A && vLevel(P.A) > .03) ids.push(q); });
+  document.querySelectorAll('[data-p]').forEach(el => el.classList.toggle('talk', ids.includes(el.dataset.p))); // sorot kartu pemain yang lagi ngomong
+  if (txt === vShown) return;
+  vShown = txt; const el = $id('vspk'); el.textContent = txt; el.hidden = !txt;
+}
+async function voiceJoin() {
+  if (vJoined || vBusy || !code) return;
+  vBusy = true;
+  try { vStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+  catch (_) { vBusy = false; showToast('Voice', 'Mic nggak bisa dipakai. Cek izin mic di browser.'); return; }
+  vBusy = false;
+  if (!code) { vStream.getTracks().forEach(t => t.stop()); vStream = null; return; }
+  vCode = code; vJoined = true; vMuted = vPtt; vMembers = {};
+  vStream.getAudioTracks().forEach(t => { t.enabled = !vMuted; });
+  try { vLocal = vAnalyser(vStream); if (vCtx.state === 'suspended') vCtx.resume(); } catch (_) {}
+  const sg = db.ref(vpath('vsig/' + me)), vr = db.ref(vpath('voice')), mine = vr.child(me);
+  await sg.remove();
+  sg.onDisconnect().remove(); mine.onDisconnect().remove();
+  sg.on('child_added', vOnSig); vr.on('value', vSync);
+  vRefs = [[sg, 'child_added', vOnSig], [vr, 'value', vSync]];
+  mine.set({ t: firebase.database.ServerValue.TIMESTAMP });
+  vTimer = setInterval(vTick, 250);
+  vUI();
+}
+function voiceOff() {
+  if (!vJoined) return;
+  vJoined = false; clearInterval(vTimer); vTimer = null;
+  vRefs.forEach(([r, ev, fn]) => r.off(ev, fn)); vRefs = [];
+  Object.keys(vPeers).forEach(vDrop);
+  try { db.ref(vpath('voice/' + me)).remove(); db.ref(vpath('vsig/' + me)).remove(); } catch (_) {}
+  if (vStream) vStream.getTracks().forEach(t => t.stop());
+  document.querySelectorAll('.talk').forEach(el => el.classList.remove('talk'));
+  vStream = null; vLocal = null; vMembers = {}; vShown = ''; $id('vspk').hidden = true; vCode = null;
+  vUI();
+}
+function vUI() {
+  const f = $id('vfab'), r = $id('vrow'), ps = (room && room.players) || {};
+  const avail = voiceOK && !!code && Object.keys(ps).length >= 2 && !Object.values(ps).some(p => p && p.bot); // cuma room sesama manusia
+  f.hidden = !(avail || vJoined);
+  f.textContent = !vJoined ? '🎤' : vMuted ? (vPtt ? '✋' : '🔇') : '🎙️';
+  f.className = 'fab vfab' + (vJoined ? (vPtt ? ' ptt' + (vMuted ? '' : ' on') : (vMuted ? ' mute' : ' on')) : '');
+  $id('vptt').textContent = vPtt ? 'Mode: tahan ngomong' : 'Mode: open mic';
+  r.hidden = !vJoined;
+  $id('vst').textContent = vJoined ? (vPtt ? (vMuted ? 'Tahan tombol ✋ buat ngomong' : 'Lagi ngomong...') : (vMuted ? 'Mic lo mati, tap 🔇 buat nyalain' : 'Mic lo nyala, tap 🎙️ buat mute')) + ' • ' + (Object.keys(vMembers).length + 1) + ' orang di voice' : '';
+}
+function vSetMute(m) { vMuted = m; if (vStream) vStream.getAudioTracks().forEach(t => { t.enabled = !vMuted; }); vUI(); }
+$id('vfab').onclick = () => {
+  if (!vJoined) return voiceJoin();
+  if (!vPtt) vSetMute(!vMuted); // mode tahan-ngomong diurus pointerdown/up
+};
+(function () {
+  const f = $id('vfab'), down = e => { if (vJoined && vPtt) { e.preventDefault(); try { f.setPointerCapture(e.pointerId); } catch (_) {} vSetMute(false); } }, up = () => { if (vJoined && vPtt && !vMuted) vSetMute(true); };
+  f.addEventListener('pointerdown', down); f.addEventListener('pointerup', up); f.addEventListener('pointercancel', up); f.addEventListener('lostpointercapture', up);
+  f.addEventListener('contextmenu', e => e.preventDefault());
+})();
+$id('vptt').onclick = () => {
+  vPtt = !vPtt; localStorage.setItem('k13ptt', vPtt ? '1' : '0');
+  vSetMute(vPtt); // PTT: mulai mute; open mic: langsung nyala
+};
+$id('vleave').onclick = voiceOff;
 
 // ---------- presence: ping server, ping pemain, status AFK ----------
 // rooms/<kode>/presence/<pid> = { online, seen (heartbeat 5 dtk), ping (ms), hid (waktu pindah tab), off (waktu putus) }
@@ -780,7 +974,7 @@ function draw() {
 }
 function drawHome() {
   const nm = localStorage.getItem('k13name') || '', rc = localStorage.getItem('k13room') || '';
-  $.innerHTML = `<h1>Kartu 13</h1><h2>Tiến lên online, 2 sampai 4 pemain</h2>
+  $.innerHTML = `<h1>Kartu 13</h1><h2>Poker13 online, 2 sampai 4 pemain</h2>
   <div class="box"><label>Nama lo<input id="nm" maxlength="14" value="${esc(nm)}"></label></div>
   <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
   <div class="box"><b>Lawan bot (4 pemain)</b><label>Tingkat<select id="bl" style="width:100%;padding:10px;margin-top:4px;border-radius:10px;background:#0000002e;color:inherit;border:1px solid #ffffff33;font:inherit"><option value="0">Mudah</option><option value="1">Sedang</option><option value="2" selected>Susah</option><option value="3">Master</option></select></label>
@@ -804,14 +998,15 @@ function drawHome() {
   <li>Kartu 2 adalah yang tertinggi dan <b>nggak bisa dibales</b> kartu 2 lain atau kombinasi biasa. Pemain lain cuma bisa lewat atau memotong dengan bom, termasuk yang tadi sudah lewat di ronde itu.</li>
   <li>Kartu <b>2 tunggal</b> di meja bisa dipotong bom biasa atau bom x2. Kartu <b>2 kembar</b> (pasangan 22, 3 kembar, atau 4 kartu 2) cuma bisa dipotong <b>bom x2</b>.</li>
   <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
+  <li><b>Ngebom diri sendiri</b>: kalau kartu terakhir lo (yang bikin kartu habis) mengandung kartu 2, lo <b>kalah</b> dan game langsung dibatalkan (nggak ada pemenang). Game berikutnya mulai lagi dari fase kumpulin 3.</li>
   <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
   <h3>Lawan bot</h3><ul><li>Dari halaman awal pilih <b>Main lawan bot</b>: lo lawan 3 bot, tingkat Mudah, Sedang, Susah, atau Master. Aturannya sama persis dengan main online.</li></ul>
   <h3>Awal game</h3><ul><li><b>4 kartu 2 di tangan awal = kalah instan.</b> Game langsung dibatalkan dan diulang dari fase kumpulin 3.</li>
-  <li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
+  <li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2 atau habis kartu pakai 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
   <li><b>Setelah game selesai (semua juara ketemu, termasuk yang berhenti karena murni)</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
   <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, di awal game lo bisa pilih <b>berhenti</b> atau <b>lanjut main</b>.</li>
   <li>Berhenti = lo langsung jadi juara berikutnya (juara 1 kalau yang pertama) dan game tetap lanjut: pemain lain rebutan juara sisanya sampai kartunya habis beneran.</li></ul>
-  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Tiap juara harus ngabisin kartunya beneran, nggak ada berhenti di tengah. Juara terakhir otomatis yang masih punya sisa kartu. Game lanjut sampai semua juara ketemu (kecuali game berakhir karena bom memotong 2).</li></ul>
+  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Tiap juara harus ngabisin kartunya beneran, nggak ada berhenti di tengah. Juara terakhir otomatis yang masih punya sisa kartu. Game lanjut sampai semua juara ketemu (kecuali game berakhir karena bom memotong 2 atau habis kartu pakai 2).</li></ul>
   </details>
   <p class="err">${esc(err)}</p><p class="msg" style="font-size:.8rem">Versi ${VER}</p>`;
   mk.onclick = createRoom; jn.onclick = joinRoom; bt.onclick = createBotRoom;
@@ -821,7 +1016,7 @@ function drawLobby() {
   const ps = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t), host = room.host === me;
   $.innerHTML = `<h1>Ruang tunggu</h1><h2>Kasih kode ini ke temen lo</h2>
   <div class="box"><div class="code">${code}</div></div>
-  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li>${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''} ${pdHTML(id)}</li>`).join('')}</ul></div>
+  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li data-p="${id}">${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''} ${pdHTML(id)}</li>`).join('')}</ul></div>
   <div class="row">${host ? `<button id="st" ${ps.length < 2 ? 'disabled' : ''}>${ps.length < 2 ? 'Tunggu minimal 2 pemain' : 'Mulai game'}</button>` : '<p class="msg">Nunggu host mulai game...</p>'}
   <button id="lv" class="ghost">Keluar</button></div>`;
   if (host) st.onclick = start;
@@ -830,37 +1025,37 @@ function drawLobby() {
 function drawGame() {
   const g = room.game; if (!g) return;
   const ln = (g.log || []).length; // efek suara saat ada kartu keluar (dari siapa pun)
-  if (lastLog >= 0 && ln > lastLog) { const e = g.log[ln - 1]; if (g.bomb && g.over) Snd.boom(); else if (e.c) Snd.play(e.c.length); else if (e.x) Snd.pass(); }
+  if (lastLog >= 0 && ln > lastLog) { const e = g.log[ln - 1]; if ((g.bomb || g.self2) && g.over) Snd.boom(); else if (e.c) Snd.play(e.c.length); else if (e.x) Snd.pass(); }
   lastLog = ln;
   const P = room.players, hands = g.hands || {}, passed = g.passed || {}, last = g.last || null;
   const dec = g.dec || {}, pend = Object.keys(dec).length, fin = g.fin || [], rank = p => fin.indexOf(p) + 1, stopped = g.stopped || {};
   const cur = g.order[g.turn], mine = (hands[me] || []).slice().sort((a, b) => a - b);
   const myTurn = cur === me && !g.over && !pend && !fin.includes(me);
   const mi = g.order.indexOf(me), after = g.order.map((_, k) => g.order[(mi + 1 + k) % g.order.length]).slice(0, g.order.length - 1).reverse(); // pemain berikutnya ada di paling kanan
-  const opps = after.map(p => `<div class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
+  const opps = after.map(p => `<div data-p="${p}" class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
   const BL = l => l.t === 'r' ? 'seri ' + l.n + ' satu logo' : ({ q: '4 kembar', g: '4 kembar + pasangan', x: 'seri 5 satu logo + pasangan', d: '8 kartu kembar (2 x 4 kembar)' }[l.t] || 'bom');
   let center;
-  if (g.quad2) center = `<div class="win">${g.quad2 === me ? 'Lo' : esc(P[g.quad2]?.n || '?')} dapat 4 kartu 2, kalah instan</div><div>Game diulang dari fase kumpulin 3.</div>`;
+  if (g.self2) center = `<div class="win">${g.self2 === me ? 'Lo' : esc(P[g.self2]?.n || '?')} ngebom diri sendiri, kalah</div><div>Kartu terakhirnya ada angka 2. Game diulang dari fase kumpulin 3.</div><div class="cards">${cardsOf(last.c)}</div>`;
+  else if (g.quad2) center = `<div class="win">${g.quad2 === me ? 'Lo' : esc(P[g.quad2]?.n || '?')} dapat 4 kartu 2, kalah instan</div><div>Game diulang dari fase kumpulin 3.</div>`;
   else if (g.over && !g.bomb) center = `<div class="win">Permainan selesai</div>${fin.map((p, i) => `<div>Juara ${i + 1}: <b>${esc(P[p]?.n || '?')}</b>${p === me ? ' (lo)' : ''}</div>`).join('')}`;
   else if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Memotong kartu 2 pakai ${BL(last)}</div><div class="cards">${cardsOf(last.c)}</div>` : ''}`;
   else if (pend) center = `<div>Ada kartu murni (tanpa J, Q, K). Game mulai setelah pemain murni memilih.</div>`;
   else if (last) center = `<div>${esc(P[last.p]?.n)} • ${typeName[last.t]}${last.t === 'r' ? ' ' + last.n : ''}</div><div class="cards">${cardsOf(last.c)}</div>`;
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
-  const status = g.over ? (g.bomb || g.quad2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
+  const status = g.over ? (g.bomb || g.quad2 || g.self2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
   const oldVer = g.v !== VER ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
   $.innerHTML = `${oldVer}<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
   <div class="opps" style="margin-top:8px">${opps}</div>
   <div class="table">${center}</div>
   <p class="msg">${status}</p><p class="msg err">${esc(err)}</p>
   ${dec[me] ? `<div class="box"><b>Kartu murni!</b> Lo nggak dapat J, Q, K sama sekali. Berhenti sekarang = juara instan, atau lanjut main.<div class="row" style="margin-top:8px"><button id="bh">Berhenti, juara</button><button id="kt" class="ghost">Lanjut main</button></div></div>` : ''}
-  <div class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
+  <div data-p="${me}" class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
   <div class="row" style="margin-top:10px">
   ${g.over ? (hostNow() ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
-  <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${cardsOf(e.c, 'mini')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
+`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
