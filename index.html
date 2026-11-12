@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Kartu 13</title>
 <style>
 :root{--felt:#12382b;--felt2:#0c2a20;--ink:#f3ecd8;--gold:#e0b44c;--red:#c8342b;--card:#fbf7ea;--mute:#8fb0a2}
@@ -69,6 +70,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+const VER = 'v8-autoupdate'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -230,7 +232,7 @@ function deal(pids, lead) {
     start = pids.findIndex(p => hands[p].includes(low));
     col = low < 4; // ada kartu 3 yang terbagi -> fase kumpulin 3 (kalau nggak ada, pemegang kartu terendah buka bebas)
   }
-  return { order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
+  return { v: VER, order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
 }
 
 // ---------- state lokal ----------
@@ -364,7 +366,8 @@ function drawGame() {
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
   const status = g.over ? (g.bomb ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
-  $.innerHTML = `<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
+  const oldVer = g.v !== VER ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
+  $.innerHTML = `${oldVer}<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
   <div class="opps" style="margin-top:8px">${opps}</div>
   <div class="table">${center}</div>
   <p class="msg">${status}</p><p class="msg err">${esc(err)}</p>
@@ -391,6 +394,33 @@ function leaveGame() {
   if (room && room.host === me) ref.remove(); else if (ref) ref.child('game/over').set(true);
   leave(true);
 }
+
+// auto-update: kalau index.html di server beda dengan yang lagi jalan, halaman dimuat ulang otomatis (room tetap nyambung)
+(function autoUpdate() {
+  const OPEN = '<scr' + 'ipt>', CLOSE = '</scr' + 'ipt>';
+  const norm = t => t.replace(/\r\n/g, '\n').trim();
+  const hash = t => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return String(h); };
+  const own = norm(document.scripts[document.scripts.length - 1].textContent || '');
+  async function check() {
+    if (sel.size) return; // jangan ganggu pemain yang lagi milih kartu
+    try {
+      const r = await fetch(location.pathname + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      const txt = await r.text(), a = txt.indexOf(OPEN), b = txt.lastIndexOf(CLOSE);
+      if (a < 0 || b < a) return;
+      const latest = norm(txt.slice(a + OPEN.length, b));
+      if (latest === own) return;
+      const h = hash(latest);
+      if (sessionStorage.getItem('k13upd') === h) return; // sudah pernah coba muat ulang ke versi ini, cegah loop
+      sessionStorage.setItem('k13upd', h);
+      $.insertAdjacentHTML('afterbegin', '<p class="msg">Ada update, memuat versi terbaru...</p>');
+      setTimeout(() => location.replace(location.pathname + '?u=' + Date.now()), 400);
+    } catch (e) { /* offline: abaikan */ }
+  }
+  setTimeout(check, 1500);
+  setInterval(check, 45000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+})();
 
 (function resume() {
   const rc = localStorage.getItem('k13room');
