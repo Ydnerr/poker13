@@ -94,7 +94,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v24'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v25'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -136,7 +136,7 @@ function ev(cs) {
 function beats(a, l) {
   if (!l) return true;
   if (twoPlay(l)) return false; // kartu 2 itu teratas: nggak bisa dibales kartu biasa (termasuk 2 lain), cuma bisa dipotong bom
-  if (a.t === l.t && a.n === l.n) return a.k > l.k; // kombinasi + pasangan: cuma bagian utama (3 kembar / seri / 4 kembar) yang dibandingkan, pasangannya bebas asal kembar
+  if (a.t === l.t && a.n === l.n) return rk(a.k) > rk(l.k); // logo nggak ikut dihitung: angka sama nggak bisa saling kalahin. kombinasi + pasangan: cuma bagian utama (3 kembar / seri / 4 kembar) yang dibandingkan, pasangannya bebas asal kembar
   return false;
 }
 
@@ -339,7 +339,7 @@ function botMove(g, pid, lv) {
       for (const r in rs) { const rem = cnt[r] - rs[r]; if (rem > 0 && cnt[r] >= 2) s += cnt[r] >= 3 ? 5 : 3; } // jangan pecahin pasangan / tiga kembar
       s -= o.cs.length * (lv === 3 ? 2.5 : 1.5);
       if (!last && lv >= 2) { if (minOpp === 1 && o.cs.length === 1) s += 8; if (minOpp === 2 && o.cs.length === 2) s += 5; }
-      if (!last && lv === 3 && o.e.t === 's') { const k = o.e.k; if (rk(k) === 12 ? !bp : !un.some(x => x > k)) s -= 5; } // kartu yang pasti nggak kebales
+      if (!last && lv === 3 && o.e.t === 's') { const k = o.e.k; if (rk(k) === 12 ? !bp : !un.some(x => rk(x) > rk(k))) s -= 5; } // kartu yang pasti nggak kebales
       if (last && last.n === 1 && minOpp === 1) s = -o.e.k; // lawan sisa 1 kartu: keluarin yang tertinggi
     }
     o.s = s;
@@ -658,7 +658,7 @@ function drawHome() {
   <button id="jn" class="ghost" style="width:100%;margin-top:6px">Join room</button></div>
     <details class="box rules" open><summary>Aturan main</summary>
   <h3>Dasar</h3><ul><li>2 sampai 4 pemain, masing-masing dapat 13 kartu. Tujuan: habiskan kartu di tangan duluan.</li>
-  <li>Urutan angka: 3 4 5 6 7 8 9 10 J Q K A 2 (2 tertinggi). Urutan logo: ♠ &lt; ♣ &lt; ♦ &lt; ♥.</li></ul>
+  <li>Urutan angka: 3 4 5 6 7 8 9 10 J Q K A 2 (2 tertinggi). Logo cuma dipakai di fase kumpulin 3 (3♠ jalan duluan). Setelah itu yang dibandingkan cuma angkanya: angka sama (misal 9 9 lawan 9 9) nggak bisa saling kalahin.</li></ul>
   <h3>Kombinasi kartu</h3><ul><li>Tunggal, pasangan (2 angka sama), 3 kembar.</li>
   <li><b>Seri</b>: minimal 3 kartu berurutan, <b>wajib satu logo</b>, tanpa kartu 2. Seri lawan boleh beda logo dari yang di meja, asal lebih tinggi dan serinya sendiri satu logo (3♠ 4♠ 5♠ dilawan 6♦ 7♦ 8♦ atau 7♣ 8♣ 9♣).</li>
   <li><b>3 kembar + pasangan</b> (5 kartu), contoh 4 4 4 + 5 5.</li>
@@ -727,7 +727,7 @@ function drawGame() {
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
