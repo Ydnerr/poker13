@@ -49,6 +49,11 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .bar button{padding:4px 10px;font-size:.8rem;font-weight:normal}
 .rules{font-size:.92rem;color:#e6dfc8}.rules summary{cursor:pointer;color:var(--gold);font-size:1.05rem;margin-bottom:6px}
 .rules h3{font-size:.95rem;margin:12px 0 2px;color:var(--gold);font-weight:bold}.rules ul{margin:2px 0;padding-left:20px}.rules li{margin:3px 0}
+.chat{max-width:720px;margin:0 auto;padding:0 16px 28px}
+.chat .ht{color:var(--gold);display:block;margin-bottom:6px}
+.cmsg{height:160px;overflow:auto;background:#0000002e;border:1px solid #ffffff22;border-radius:10px;padding:8px 10px;font-size:.92rem}
+.cm{margin:3px 0;word-break:break-word}.cm b{color:var(--gold)}.cm.mine b{color:#9fe3b8}.cmsg i{color:var(--mute)}
+.cin{margin-top:8px;flex-wrap:nowrap}.cin input{margin:0;flex:1;min-width:0}.cin button{flex:0 0 auto}
 li{margin:4px 0}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
 @media(prefers-reduced-motion:reduce){.hand .c{transition:none}}
@@ -57,6 +62,11 @@ li{margin:4px 0}
 <body>
 <div class="bar"><button id="tm" class="ghost"></button><button id="ts" class="ghost"></button></div>
 <main id="app"></main>
+<section id="chat" class="chat" hidden>
+  <b class="ht">💬 Chat room</b>
+  <div id="cmsg" class="cmsg" role="log" aria-live="polite"></div>
+  <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
+</section>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -76,7 +86,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v14-bom3'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v15-chat'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -291,6 +301,7 @@ function enter(c) {
   lastLog = -1; code = c; err = ''; sel.clear();
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
+  chatOn(c);
   ref.on('value', s => {
     room = s.val();
     if (!room || !(room.players || {})[me]) { leave(true); return; }
@@ -299,6 +310,7 @@ function enter(c) {
 }
 function leave(silent) {
   if (ref) ref.off();
+  chatOff();
   if (!silent && room && room.status === 'lobby') {
     if (room.host === me) ref.remove(); else ref.child('players/' + me).remove();
   }
@@ -332,6 +344,36 @@ function play(pass) {
     else { err = ''; sel.clear(); }
   }, false);
 }
+
+// ---------- chat room (Firebase: rooms/<kode>/chat) ----------
+let chatRef = null, lastSend = 0;
+function chatOn(c) {
+  chatOff();
+  chatRef = db.ref('rooms/' + c + '/chat').limitToLast(50);
+  chatRef.on('value', snap => {
+    const box = document.getElementById('cmsg'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const rows = Object.entries(snap.val() || {}).sort((a, b) => a[0] < b[0] ? -1 : 1).map(x => x[1]);
+    box.innerHTML = rows.map(m => `<div class="cm ${m.p === me ? 'mine' : ''}"><b>${esc(m.n || '?')}</b> ${esc(m.m || '')}</div>`).join('') || '<i>Belum ada pesan. Sapa temen lo!</i>';
+    if (stick) box.scrollTop = box.scrollHeight;
+  });
+  document.getElementById('chat').hidden = false;
+}
+function chatOff() {
+  if (chatRef) chatRef.off();
+  chatRef = null;
+  document.getElementById('chat').hidden = true;
+  document.getElementById('cmsg').innerHTML = '';
+}
+function sendChat() {
+  const inp = document.getElementById('cin'), m = inp.value.trim().slice(0, 140);
+  if (!m || !code || Date.now() - lastSend < 700) return;
+  lastSend = Date.now();
+  const name = (room && room.players && room.players[me] && room.players[me].n) || localStorage.getItem('k13name') || '?';
+  db.ref('rooms/' + code + '/chat').push({ p: me, n: name, m, t: firebase.database.ServerValue.TIMESTAMP });
+  inp.value = '';
+}
+document.getElementById('csend').onclick = sendChat;
+document.getElementById('cin').onkeydown = e => { if (e.key === 'Enter') sendChat(); };
 
 // ---------- audio: musik ambient abad pertengahan (sintesis WebAudio, tanpa file) + efek suara ----------
 const Snd = (() => {
