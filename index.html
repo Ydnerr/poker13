@@ -94,7 +94,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v27'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v28'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -264,6 +264,8 @@ function deal(pids, lead) {
     hands[p] = d.slice(i * 13, i * 13 + 13).sort((a, b) => a - b);
     if (!hands[p].some(c => rk(c) >= 8 && rk(c) <= 10)) dec[p] = true; // murni: nol J, Q, K
   });
+  const q2 = pids.find(p => hands[p].filter(c => rk(c) === 12).length === 4); // dapat 4 kartu 2 = kalah instan, ulang dari kumpulin 3
+  if (q2) return { v: VER, order: pids, hands, s: -1, st: q2, turn: 0, last: null, passed: {}, first: false, over: true, quad2: q2, winner: null, dec: null };
   let low = -1, start = pids.indexOf(lead), col = false;
   if (start < 0) {
     low = Math.min(...pids.map(p => hands[p][0]));
@@ -681,7 +683,8 @@ function drawHome() {
   <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
   <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
   <h3>Lawan bot</h3><ul><li>Dari halaman awal pilih <b>Main lawan bot</b>: lo lawan 3 bot, tingkat Mudah, Sedang, Susah, atau Master. Aturannya sama persis dengan main online.</li></ul>
-  <h3>Awal game</h3><ul><li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
+  <h3>Awal game</h3><ul><li><b>4 kartu 2 di tangan awal = kalah instan.</b> Game langsung dibatalkan dan diulang dari fase kumpulin 3.</li>
+  <li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
   <li><b>Setelah game selesai (semua juara ketemu, termasuk yang berhenti karena murni)</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
   <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, di awal game lo bisa pilih <b>berhenti</b> atau <b>lanjut main</b>.</li>
   <li>Berhenti = lo langsung jadi juara berikutnya (juara 1 kalau yang pertama) dan game tetap lanjut: pemain lain rebutan juara sisanya sampai kartunya habis beneran.</li></ul>
@@ -714,13 +717,14 @@ function drawGame() {
   const opps = after.map(p => `<div class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}<br>${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
   const BL = l => l.t === 'r' ? 'seri ' + l.n + ' satu logo' : ({ q: '4 kembar', g: '4 kembar + pasangan', x: 'seri 5 satu logo + pasangan', d: '8 kartu kembar (2 x 4 kembar)' }[l.t] || 'bom');
   let center;
-  if (g.over && !g.bomb) center = `<div class="win">Permainan selesai</div>${fin.map((p, i) => `<div>Juara ${i + 1}: <b>${esc(P[p]?.n || '?')}</b>${p === me ? ' (lo)' : ''}</div>`).join('')}`;
+  if (g.quad2) center = `<div class="win">${g.quad2 === me ? 'Lo' : esc(P[g.quad2]?.n || '?')} dapat 4 kartu 2, kalah instan</div><div>Game diulang dari fase kumpulin 3.</div>`;
+  else if (g.over && !g.bomb) center = `<div class="win">Permainan selesai</div>${fin.map((p, i) => `<div>Juara ${i + 1}: <b>${esc(P[p]?.n || '?')}</b>${p === me ? ' (lo)' : ''}</div>`).join('')}`;
   else if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Memotong kartu 2 pakai ${BL(last)}</div><div class="cards">${cardsOf(last.c)}</div>` : ''}`;
   else if (pend) center = `<div>Ada kartu murni (tanpa J, Q, K). Game mulai setelah pemain murni memilih.</div>`;
   else if (last) center = `<div>${esc(P[last.p]?.n)} • ${typeName[last.t]}${last.t === 'r' ? ' ' + last.n : ''}</div><div class="cards">${cardsOf(last.c)}</div>`;
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
-  const status = g.over ? (g.bomb ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
+  const status = g.over ? (g.bomb || g.quad2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
   const oldVer = g.v !== VER ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
   $.innerHTML = `${oldVer}<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
   <div class="opps" style="margin-top:8px">${opps}</div>
