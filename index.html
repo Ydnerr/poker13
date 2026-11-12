@@ -53,6 +53,11 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .chat .ht{color:var(--gold);display:block;margin-bottom:6px}
 .cmsg{height:160px;overflow:auto;background:#0000002e;border:1px solid #ffffff22;border-radius:10px;padding:8px 10px;font-size:.92rem}
 .cm{margin:3px 0;word-break:break-word}.cm b{color:var(--gold)}.cm.mine b{color:#9fe3b8}.cmsg i{color:var(--mute)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{padding:4px 10px;font-size:.82rem;font-weight:normal}
+.fab{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:20;width:46px;height:46px;padding:0;border-radius:50%;font-size:1.3rem;opacity:.92;box-shadow:0 2px 10px #0008}
+.badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:.72rem;line-height:18px;font-weight:bold}
+.toast{position:fixed;left:12px;right:70px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:19;background:#000d;border:1px solid var(--gold);border-radius:12px;padding:8px 12px;font-size:.92rem;cursor:pointer;word-break:break-word}
+.badge[hidden],.toast[hidden]{display:none}
 .cin{margin-top:8px;flex-wrap:nowrap}.cin input{margin:0;flex:1;min-width:0}.cin button{flex:0 0 auto}
 li{margin:4px 0}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
@@ -65,8 +70,11 @@ li{margin:4px 0}
 <section id="chat" class="chat" hidden>
   <b class="ht">💬 Chat room</b>
   <div id="cmsg" class="cmsg" role="log" aria-live="polite"></div>
+  <div class="chips" id="chips"></div>
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
 </section>
+<button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
+<div id="ctoast" class="toast" hidden></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
@@ -86,7 +94,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v15-chat'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v17-dua'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -127,6 +135,7 @@ function ev(cs) {
 }
 function beats(a, l) {
   if (!l) return true;
+  if (twoPlay(l)) return false; // kartu 2 itu teratas: nggak bisa dibales kartu biasa (termasuk 2 lain), cuma bisa dipotong bom
   if (a.t === l.t && a.n === l.n) return a.k > l.k && (!(a.t === 'f' || a.t === 'x' || a.t === 'g') || a.k2 > l.k2); // kombinasi + pasangan: angka utama DAN pasangan harus lebih tinggi
   return false;
 }
@@ -331,6 +340,7 @@ function why(g, cards) {
   if (g.first) { const m3 = hand.filter(c => rk(c) === 0); return cards.length === m3.length && m3.every(c => cards.includes(c)) ? '' : 'Fase kumpulin 3: keluarin semua kartu 3 lo sekaligus (' + m3.length + ' kartu).'; }
   if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Seri harus satu logo semua (3+ kartu berurutan, tanpa 2). Lainnya: pasangan, 3 kembar, 3 kembar + pasangan, seri + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
   if (cuts(e, last)) return '';
+  if (last && twoPlay(last)) return last.c.length === 1 ? 'Kartu 2 nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom (4 kembar, seri 5 satu logo, atau bom x2).' : 'Kartu 2 kembar nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom x2 (8 kartu kembar atau seri 10).';
   if (last && twoPlay(last) && last.c.length >= 2 && (isBomb(e) || e.t === 'q')) return 'Kartu 2 kembar cuma bisa dipotong 8 kartu kembar (2 x 4 kembar, misal 3333 + 6666) atau seri 10 kartu satu logo.';
   if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Angka utama dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
@@ -346,34 +356,55 @@ function play(pass) {
 }
 
 // ---------- chat room (Firebase: rooms/<kode>/chat) ----------
-let chatRef = null, lastSend = 0;
+let chatRef = null, lastSend = 0, lastKey = null, unread = 0, toastT = null;
+const QUICK = ['😂 Kartu lo jelek banget!', 'Gas terus! 🔥', 'Yah kasian 😅', 'GG! 👏'];
+const $id = x => document.getElementById(x);
+const chatInView = () => { const r = $id('chat').getBoundingClientRect(); return r.top < innerHeight - 60 && r.bottom > 60; };
+function setBadge() { const b = $id('cbadge'); b.textContent = unread > 0 ? String(Math.min(unread, 9)) : ''; b.hidden = unread < 1; }
+function showToast(n, m) {
+  const t = $id('ctoast'); t.innerHTML = '<b>' + esc(n || '?') + '</b> ' + esc(m || ''); t.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 4500);
+}
 function chatOn(c) {
   chatOff();
+  lastKey = null; unread = 0; setBadge();
   chatRef = db.ref('rooms/' + c + '/chat').limitToLast(50);
   chatRef.on('value', snap => {
-    const box = document.getElementById('cmsg'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-    const rows = Object.entries(snap.val() || {}).sort((a, b) => a[0] < b[0] ? -1 : 1).map(x => x[1]);
-    box.innerHTML = rows.map(m => `<div class="cm ${m.p === me ? 'mine' : ''}"><b>${esc(m.n || '?')}</b> ${esc(m.m || '')}</div>`).join('') || '<i>Belum ada pesan. Sapa temen lo!</i>';
+    const box = $id('cmsg'), stick = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+    const ents = Object.entries(snap.val() || {}).sort((a, b) => a[0] < b[0] ? -1 : 1);
+    box.innerHTML = ents.map(([, m]) => `<div class="cm ${m.p === me ? 'mine' : ''}"><b>${esc(m.n || '?')}</b> ${esc(m.m || '')}</div>`).join('') || '<i>Belum ada pesan. Sapa temen lo!</i>';
     if (stick) box.scrollTop = box.scrollHeight;
+    if (lastKey !== null) { // pesan baru dari pemain lain: bunyi + notifikasi kalau panel chat nggak lagi kelihatan
+      const fresh = ents.filter(([k, m]) => k > lastKey && m.p !== me);
+      if (fresh.length) {
+        Snd.msg();
+        if (!chatInView()) { unread += fresh.length; setBadge(); const m = fresh[fresh.length - 1][1]; showToast(m.n, m.m); }
+      }
+    }
+    lastKey = ents.length ? ents[ents.length - 1][0] : '';
   });
-  document.getElementById('chat').hidden = false;
+  $id('chat').hidden = false; $id('cfab').hidden = false;
 }
 function chatOff() {
   if (chatRef) chatRef.off();
-  chatRef = null;
-  document.getElementById('chat').hidden = true;
-  document.getElementById('cmsg').innerHTML = '';
+  chatRef = null; unread = 0;
+  $id('chat').hidden = true; $id('cfab').hidden = true; $id('ctoast').hidden = true; $id('cmsg').innerHTML = '';
 }
-function sendChat() {
-  const inp = document.getElementById('cin'), m = inp.value.trim().slice(0, 140);
-  if (!m || !code || Date.now() - lastSend < 700) return;
+function sendText(m) {
+  m = (m || '').trim().slice(0, 140);
+  if (!m || !code || Date.now() - lastSend < 700) return false;
   lastSend = Date.now();
   const name = (room && room.players && room.players[me] && room.players[me].n) || localStorage.getItem('k13name') || '?';
   db.ref('rooms/' + code + '/chat').push({ p: me, n: name, m, t: firebase.database.ServerValue.TIMESTAMP });
-  inp.value = '';
+  return true;
 }
-document.getElementById('csend').onclick = sendChat;
-document.getElementById('cin').onkeydown = e => { if (e.key === 'Enter') sendChat(); };
+function sendChat() { const inp = $id('cin'); if (sendText(inp.value)) inp.value = ''; }
+$id('csend').onclick = sendChat;
+$id('cin').onkeydown = e => { if (e.key === 'Enter') sendChat(); };
+QUICK.forEach(t => { const b = document.createElement('button'); b.className = 'ghost chip'; b.textContent = t; b.onclick = () => sendText(t); $id('chips').appendChild(b); });
+$id('cfab').onclick = () => { $id('chat').scrollIntoView({ behavior: 'smooth', block: 'end' }); unread = 0; setBadge(); $id('ctoast').hidden = true; };
+$id('ctoast').onclick = () => $id('cfab').onclick();
+addEventListener('scroll', () => { if (unread && chatInView()) { unread = 0; setBadge(); } }, { passive: true });
 
 // ---------- audio: musik ambient abad pertengahan (sintesis WebAudio, tanpa file) + efek suara ----------
 const Snd = (() => {
@@ -462,6 +493,7 @@ const Snd = (() => {
     hidden(h) { if (!ac) return; h ? (ac.suspend(), stopMusic()) : (ac.resume(), startMusic()); },
     tick(up) { if (!ok()) return; const t = ac.currentTime; noise(t, .05, 'bandpass', up ? 2800 : 1800, up ? 2200 : 1200, .4); tone(t, up ? 950 : 640, up ? 700 : 480, .06, .12); },
     play(n) { if (!ok()) return; const t = ac.currentTime; for (let i = 0; i < Math.min(n, 4); i++) { const u = t + i * .075; noise(u, .14, 'highpass', 4200, 1400, .3); tone(u + .06, 150, 55, .14, .38); } },
+    msg() { if (!ok()) return; const t = ac.currentTime; tone(t, 880, 880, .09, .08); tone(t + .11, 1175, 1175, .12, .08); },
     pass() { if (!ok()) return; tone(ac.currentTime, 330, 220, .12, .1); },
     boom() { if (!ok()) return; const t = ac.currentTime; tone(t, 95, 28, .9, .6); noise(t, .7, 'lowpass', 900, 120, .5); [293.66, 349.23, 440].forEach((f, i) => tone(t + .15 + i * .12, f, f, .7, .12)); }
   };
@@ -513,6 +545,7 @@ function drawHome() {
   <li>Giliran bergerak ke arah kanan.</li></ul>
   <h3>Bom dan kartu 2</h3><ul><li><b>Bom biasa</b> = 4 kartu kembar atau seri 5 kartu satu logo, masing-masing boleh ditambah 1 pasangan.</li>
   <li><b>Bom x2</b> = 8 kartu kembar (dua set 4 kembar, contoh 3333 + 6666) atau seri 10 kartu satu logo.</li>
+  <li>Kartu 2 adalah yang tertinggi dan <b>nggak bisa dibales</b> kartu 2 lain atau kombinasi biasa. Pemain lain cuma bisa lewat atau memotong dengan bom.</li>
   <li>Kartu <b>2 tunggal</b> di meja bisa dipotong bom biasa atau bom x2. Kartu <b>2 kembar</b> (pasangan 22, 3 kembar, atau 4 kartu 2) cuma bisa dipotong <b>bom x2</b>.</li>
   <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
   <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
