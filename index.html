@@ -44,12 +44,18 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .he i{color:var(--mute)}
 .c.mini{width:30px;height:42px;font-size:.72rem;margin:0 -2px 0 0;padding:2px 3px;border-radius:4px}
 .c.mini b{display:none}
+.c b.f{margin-top:2px;line-height:1}.c b.f svg{width:26px;height:26px;display:block;margin:0 auto}.c b.f i{display:block;font-style:normal;font-size:.8rem;line-height:1;text-align:center;margin-top:1px}
+.bar{max-width:720px;margin:0 auto;padding:8px 16px 0;display:flex;gap:8px;justify-content:flex-end}
+.bar button{padding:4px 10px;font-size:.8rem;font-weight:normal}
+.rules{font-size:.92rem;color:#e6dfc8}.rules summary{cursor:pointer;color:var(--gold);font-size:1.05rem;margin-bottom:6px}
+.rules h3{font-size:.95rem;margin:12px 0 2px;color:var(--gold);font-weight:bold}.rules ul{margin:2px 0;padding-left:20px}.rules li{margin:3px 0}
 li{margin:4px 0}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
 @media(prefers-reduced-motion:reduce){.hand .c{transition:none}}
 </style>
 </head>
 <body>
+<div class="bar"><button id="tm" class="ghost"></button><button id="ts" class="ghost"></button></div>
 <main id="app"></main>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -70,7 +76,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v9-satulogo'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v11-musik'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -238,7 +244,7 @@ function deal(pids, lead) {
 // ---------- state lokal ----------
 let me = localStorage.getItem('k13pid');
 if (!me) { me = 'p' + Math.random().toString(36).slice(2, 10); localStorage.setItem('k13pid', me); }
-let code = null, room = null, ref = null, sel = new Set(), err = '';
+let lastLog = -1, code = null, room = null, ref = null, sel = new Set(), err = '';
 
 function setErr(m) { err = m; draw(); }
 function genCode() {
@@ -276,7 +282,7 @@ async function joinRoom() {
   enter(c);
 }
 function enter(c) {
-  code = c; err = ''; sel.clear();
+  lastLog = -1; code = c; err = ''; sel.clear();
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
   ref.on('value', s => {
@@ -291,7 +297,7 @@ function leave(silent) {
     if (room.host === me) ref.remove(); else ref.child('players/' + me).remove();
   }
   localStorage.removeItem('k13room');
-  code = room = ref = null; sel.clear(); draw();
+  lastLog = -1; code = room = ref = null; sel.clear(); draw();
 }
 function start() {
   const pids = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t).map(x => x[0]);
@@ -321,8 +327,116 @@ function play(pass) {
   }, false);
 }
 
+// ---------- audio: musik ambient abad pertengahan (sintesis WebAudio, tanpa file) + efek suara ----------
+const Snd = (() => {
+  let ac, musicGain, sfxGain, mBus, nbuf, timer = null, mt = 0, pt = 0, deg = 3, ci = 0;
+  const on = { music: localStorage.getItem('k13m') !== '0', sfx: localStorage.getItem('k13s') !== '0' };
+  const SC = [0, 2, 3, 5, 7, 9, 10], D4 = 293.66; // mode Dorian di D
+  const freqOf = d => D4 * Math.pow(2, (SC[((d % 7) + 7) % 7] + 12 * Math.floor(d / 7)) / 12);
+  const CH = [[146.83, 174.61, 220], [130.81, 164.81, 196], [98, 123.47, 146.83], [110, 130.81, 164.81]]; // Dm, C, G, Am
+  const PROG = [0, 1, 0, 3, 2, 0, 1, 3];
+  function note(f, t, dur, vel) { // petikan kecapi/lute
+    const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain(), g2 = ac.createGain(), fl = ac.createBiquadFilter();
+    o.type = 'triangle'; o2.type = 'sine'; o.frequency.value = f; o2.frequency.value = f * 2; g2.gain.value = .25;
+    fl.type = 'lowpass'; fl.frequency.setValueAtTime(2600, t); fl.frequency.exponentialRampToValueAtTime(500, t + dur);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(fl); o2.connect(g2); g2.connect(fl); fl.connect(g); g.connect(mBus);
+    o.start(t); o2.start(t); o.stop(t + dur + .05); o2.stop(t + dur + .05);
+  }
+  function pad(fs, t, dur) { // akor panjang yang lembut
+    fs.forEach(f => {
+      const o = ac.createOscillator(), g = ac.createGain(), fl = ac.createBiquadFilter();
+      o.type = 'triangle'; o.frequency.value = f; o.detune.value = (Math.random() - .5) * 12;
+      fl.type = 'lowpass'; fl.frequency.value = 750;
+      g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.045, t + 2); g.gain.setValueAtTime(.045, t + dur - 2.2); g.gain.linearRampToValueAtTime(.0001, t + dur);
+      o.connect(fl); fl.connect(g); g.connect(mBus); o.start(t); o.stop(t + dur + .05);
+    });
+  }
+  function sched() {
+    const now = ac.currentTime;
+    if (mt < now) mt = now + .1;
+    if (pt < now) pt = now + .1;
+    while (pt < now + 3) { pad(CH[PROG[ci++ % PROG.length]], pt, 7); pt += 6; }
+    while (mt < now + 3) {
+      deg = Math.max(-2, Math.min(9, deg + [-2, -1, -1, 0, 1, 1, 2][Math.random() * 7 | 0]));
+      if (Math.random() < .25) { mt += .7 + Math.random() * .6; continue; }
+      const dur = [1.2, 1.8, 2.4][Math.random() * 3 | 0];
+      note(freqOf(deg), mt, dur, .13);
+      if (Math.random() < .2) note(freqOf(deg - 2), mt + .02, dur, .06);
+      mt += [.7, .7, 1.4, 1.4, 2.1][Math.random() * 5 | 0];
+    }
+  }
+  function startMusic() { if (!timer && ac && on.music) { sched(); timer = setInterval(sched, 800); } }
+  function stopMusic() { clearInterval(timer); timer = null; }
+  function init() {
+    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    ac = new AC();
+    const master = ac.createGain(); master.connect(ac.destination);
+    musicGain = ac.createGain(); musicGain.gain.value = on.music ? .55 : 0; musicGain.connect(master);
+    sfxGain = ac.createGain(); sfxGain.gain.value = on.sfx ? 1 : 0; sfxGain.connect(master);
+    mBus = ac.createGain(); mBus.connect(musicGain);
+    const rv = ac.createConvolver(), wet = ac.createGain(), len = ac.sampleRate * 2.8, ib = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ib.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    rv.buffer = ib; wet.gain.value = .6; mBus.connect(rv); rv.connect(wet); wet.connect(musicGain);
+    [[73.42, .06], [110, .035]].forEach(([f, v]) => { // dengung rendah (drone)
+      const o = ac.createOscillator(), g = ac.createGain(), l = ac.createOscillator(), lg = ac.createGain();
+      o.type = 'sine'; o.frequency.value = f; g.gain.value = v; l.frequency.value = .08 + Math.random() * .05; lg.gain.value = v * .5;
+      l.connect(lg); lg.connect(g.gain); o.connect(g); g.connect(mBus); o.start(); l.start();
+    });
+    nbuf = ac.createBuffer(1, ac.sampleRate * .4, ac.sampleRate);
+    const nd = nbuf.getChannelData(0); for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+    startMusic();
+  }
+  const ok = () => ac && on.sfx && ac.state === 'running';
+  function noise(t, dur, type, f0, f1, vel) {
+    const s = ac.createBufferSource(), fl = ac.createBiquadFilter(), g = ac.createGain();
+    s.buffer = nbuf; fl.type = type; fl.Q.value = 3;
+    fl.frequency.setValueAtTime(f0, t); fl.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(vel, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    s.connect(fl); fl.connect(g); g.connect(sfxGain); s.start(t); s.stop(t + dur + .02);
+  }
+  function tone(t, f0, f1, dur, vel) {
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    g.gain.setValueAtTime(vel, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+    o.connect(g); g.connect(sfxGain); o.start(t); o.stop(t + dur + .02);
+  }
+  return {
+    init,
+    on,
+    set(k, v) {
+      on[k] = v; localStorage.setItem(k === 'music' ? 'k13m' : 'k13s', v ? '1' : '0');
+      if (!ac) { if (v) init(); return; }
+      (k === 'music' ? musicGain : sfxGain).gain.setTargetAtTime(v ? (k === 'music' ? .55 : 1) : 0, ac.currentTime, .15);
+      if (k === 'music') v ? startMusic() : stopMusic();
+    },
+    hidden(h) { if (!ac) return; h ? (ac.suspend(), stopMusic()) : (ac.resume(), startMusic()); },
+    tick(up) { if (!ok()) return; const t = ac.currentTime; noise(t, .05, 'bandpass', up ? 2800 : 1800, up ? 2200 : 1200, .4); tone(t, up ? 950 : 640, up ? 700 : 480, .06, .12); },
+    play(n) { if (!ok()) return; const t = ac.currentTime; for (let i = 0; i < Math.min(n, 4); i++) { const u = t + i * .075; noise(u, .14, 'highpass', 4200, 1400, .3); tone(u + .06, 150, 55, .14, .38); } },
+    pass() { if (!ok()) return; tone(ac.currentTime, 330, 220, .12, .1); },
+    boom() { if (!ok()) return; const t = ac.currentTime; tone(t, 95, 28, .9, .6); noise(t, .7, 'lowpass', 900, 120, .5); [293.66, 349.23, 440].forEach((f, i) => tone(t + .15 + i * .12, f, f, .7, .12)); }
+  };
+})();
+['pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, () => Snd.init(), { passive: true }));
+document.addEventListener('visibilitychange', () => Snd.hidden(document.hidden));
+function barLabels() {
+  document.getElementById('tm').textContent = '🎵 Musik: ' + (Snd.on.music ? 'nyala' : 'mati');
+  document.getElementById('ts').textContent = '🔊 Suara: ' + (Snd.on.sfx ? 'nyala' : 'mati');
+}
+document.getElementById('tm').onclick = () => { Snd.init(); Snd.set('music', !Snd.on.music); barLabels(); };
+document.getElementById('ts').onclick = () => { Snd.init(); Snd.set('sfx', !Snd.on.sfx); barLabels(); };
+barLabels();
+
 // ---------- tampilan ----------
-const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}<b>${S[su(id)]}</b></div>`;
+// gambar kartu J, Q, K (SVG inline, warna ikut warna kartu)
+const SV = p => `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+const FACE = {
+  8: SV('<path d="M12 1.5 14.2 14h-4.4z"/><rect x="6.5" y="14" width="11" height="2.2" rx="1"/><rect x="10.8" y="16.2" width="2.4" height="4"/><circle cx="12" cy="21.3" r="1.7"/>'), // J: pedang
+  9: SV('<path d="M4 19 5 10.5 9 14.5 12 8.5 15 14.5 19 10.5 20 19z"/><circle cx="5" cy="8.8" r="1.8"/><circle cx="12" cy="6.3" r="2"/><circle cx="19" cy="8.8" r="1.8"/><rect x="4" y="19.5" width="16" height="2" rx="1"/>'), // Q: mahkota bulat
+  10: SV('<path d="M4 19V9l4.5 4L12 7l3.5 6L20 9v10z"/><rect x="11" y="1" width="2" height="5.5"/><rect x="9.3" y="2.6" width="5.4" height="2"/><rect x="4" y="19.5" width="16" height="2" rx="1"/>') // K: mahkota + salib
+};
+const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}${FACE[rk(id)] ? `<b class="f">${FACE[rk(id)]}<i>${S[su(id)]}</i></b>` : `<b>${S[su(id)]}</b>`}</div>`;
 const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
@@ -337,6 +451,23 @@ function drawHome() {
   <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
   <div class="box"><label>Atau masuk pakai kode<input id="cd" maxlength="5" inputmode="numeric" pattern="[0-9]*" placeholder="mis. 48215"></label>
   <button id="jn" class="ghost" style="width:100%;margin-top:6px">Join room</button></div>
+    <details class="box rules" open><summary>Aturan main</summary>
+  <h3>Dasar</h3><ul><li>2 sampai 4 pemain, masing-masing dapat 13 kartu. Tujuan: habiskan kartu di tangan duluan.</li>
+  <li>Urutan angka: 3 4 5 6 7 8 9 10 J Q K A 2 (2 tertinggi). Urutan logo: ♠ &lt; ♣ &lt; ♦ &lt; ♥.</li></ul>
+  <h3>Kombinasi kartu</h3><ul><li>Tunggal, pasangan (2 angka sama), 3 kembar.</li>
+  <li><b>Seri</b>: minimal 3 kartu berurutan, <b>wajib satu logo</b>, tanpa kartu 2.</li>
+  <li><b>3 kembar + pasangan</b> (5 kartu), contoh 4 4 4 + 5 5.</li>
+  <li><b>Seri satu logo + pasangan</b>, contoh 3♠ 4♠ 5♠ + 7 7.</li>
+  <li>Untuk dua kombinasi bonus di atas, lawannya harus jenis sama dan angka utama <b>dan</b> pasangannya sama-sama lebih tinggi (4 4 4 + 5 5 dilawan 5 5 5 + 6 6).</li></ul>
+  <h3>Jalannya ronde</h3><ul><li>Keluarkan kombinasi sejenis, jumlah sama, dan lebih tinggi, atau lewat. Yang sudah lewat tidak bisa ikut lagi sampai ronde baru.</li>
+  <li>Kalau semua lewat, pemain terakhir yang keluarin kartu buka ronde baru dengan kombinasi bebas.</li>
+  <li>Giliran bergerak ke arah kanan.</li></ul>
+  <h3>Bom instan</h3><ul><li><b>4 kartu kembar</b> atau <b>seri 5 kartu</b> (satu logo): game langsung berakhir dan pengeluarnya menang. Boleh dikeluarkan kapan saja di giliran sendiri.</li></ul>
+  <h3>Awal game</h3><ul><li><b>Game pertama di room atau setelah bom instan</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
+  <li><b>Setelah ada yang kartunya habis atau berhenti karena murni</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
+  <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, lo bisa pilih <b>berhenti</b> (juara instan) atau <b>lanjut main</b>.</li></ul>
+  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Game lanjut sampai juara 2, 3, dan 4 ketemu (kecuali kena bom instan).</li></ul>
+  </details>
   <p class="err">${esc(err)}</p><p class="msg" style="font-size:.8rem">Versi ${VER}</p>`;
   mk.onclick = createRoom; jn.onclick = joinRoom;
   if (rc) { document.getElementById('cd').value = rc; }
@@ -353,6 +484,9 @@ function drawLobby() {
 }
 function drawGame() {
   const g = room.game; if (!g) return;
+  const ln = (g.log || []).length; // efek suara saat ada kartu keluar (dari siapa pun)
+  if (lastLog >= 0 && ln > lastLog) { const e = g.log[ln - 1]; if (g.bomb && g.over) Snd.boom(); else if (e.c) Snd.play(e.c.length); else if (e.x) Snd.pass(); }
+  lastLog = ln;
   const P = room.players, hands = g.hands || {}, passed = g.passed || {}, last = g.last || null;
   const dec = g.dec || {}, pend = Object.keys(dec).length, fin = g.fin || [], rank = p => fin.indexOf(p) + 1, stopped = g.stopped || {};
   const cur = g.order[g.turn], mine = (hands[me] || []).slice().sort((a, b) => a - b);
@@ -383,7 +517,7 @@ function drawGame() {
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
-    const id = +el.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); err = ''; drawGame();
+    const id = +el.dataset.id, up = !sel.has(id); Snd.tick(up); up ? sel.add(id) : sel.delete(id); err = ''; drawGame();
   };
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
   if (g.over) { if (room.host === me) again.onclick = start; return; }
