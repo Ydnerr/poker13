@@ -112,6 +112,7 @@ function bombOf(cards) {
   return null;
 }
 const act = g => g.order.filter(p => !(g.fin || []).includes(p));
+const has3 = (g, p) => (g.hands[p] || []).some(c => rk(c) === 0);
 const addLog = (g, e) => { g.log = (g.log || []).concat([e]); };
 function nextTurn(g, passed) {
   let i = g.turn;
@@ -138,6 +139,28 @@ function move(g, pid, cards, pass) {
   if (g.dec && Object.keys(g.dec).length) return; // tunggu pemain murni memilih
   g.fin = g.fin || [];
   if (g.fin.includes(pid)) return;
+  if (g.first) { // fase kumpulin 3: tiap pemain yang pegang angka 3 keluarin SEMUA kartu 3-nya sekaligus (1, 2, 3 atau 4 kartu)
+    if (pass) return;
+    const hand = g.hands[pid] || [], m3 = hand.filter(c => rk(c) === 0);
+    if (!m3.length || cards.length !== m3.length || !m3.every(c => cards.includes(c))) return;
+    g.hands[pid] = hand.filter(c => rk(c) !== 0);
+    const sorted = [...cards].sort((a, b) => a - b);
+    addLog(g, { p: pid, c: sorted });
+    if (bombOf(sorted)) { // 4 kartu 3 sekaligus = bom instan
+      g.last = { p: pid, c: sorted, t: 'q', n: 4, k: sorted[3], k2: 0 };
+      g.over = true; g.winner = pid; g.bomb = true; g.fin = [pid];
+      return g;
+    }
+    g.last = { p: pid, c: sorted, t: 'c', n: sorted.length, k: sorted[sorted.length - 1], k2: 0 };
+    for (let k = 1; k <= g.order.length; k++) { // pemain berikutnya yang masih pegang 3
+      const i = (g.turn + k) % g.order.length, p = g.order[i];
+      if (!g.fin.includes(p) && has3(g, p)) { g.turn = i; return g; }
+    }
+    g.first = false; // semua 3 terkumpul: pemegang 3 terendah (3♠ kalau ada) jalan duluan, bebas kombinasi
+    addLog(g, { p: g.st, m: 'semua 3 terkumpul, jalan duluan' });
+    startRound(g, g.st);
+    return g;
+  }
   const last = g.last || null, passed = g.passed || {};
   if (pass) {
     if (!last || g.first) return;
@@ -152,7 +175,7 @@ function move(g, pid, cards, pass) {
   if (!cards.length || !cards.every(c => hand.includes(c))) return;
   const e = ev(cards), bb = bombOf(cards);
   if (!e && !bb) return;
-  if (!bb && ((g.first && !cards.includes(g.s)) || !beats(e, last))) return;
+  if (!bb && !beats(e, last)) return;
   g.hands[pid] = hand.filter(c => !cards.includes(c));
   const sorted = [...cards].sort((a, b) => a - b);
   addLog(g, { p: pid, c: sorted });
@@ -183,9 +206,11 @@ function decide(g, pid, stop) {
   g.hands[pid] = [];
   g.stopped = g.stopped || {}; g.stopped[pid] = true;
   if (finish(g, pid, 'kartu murni, berhenti: ')) return g;
-  if (g.first) { // game wajib-3: pemegang kartu terendah dari pemain yang tersisa jalan duluan
-    const low = Math.min(...act(g).map(p => g.hands[p][0]));
-    g.s = low; g.turn = g.order.findIndex(p => (g.hands[p] || []).includes(low));
+  if (g.first) { // fase kumpulin 3: starter baru = pemegang 3 terendah dari pemain yang tersisa
+    const a = act(g), pool = a.filter(p => has3(g, p)), src = pool.length ? pool : a;
+    const low = Math.min(...src.map(p => g.hands[p][0]));
+    g.st = g.order.find(p => (g.hands[p] || []).includes(low));
+    g.turn = g.order.indexOf(g.st); g.first = pool.length > 0;
   } else if (g.order[g.turn] === pid) startRound(g, pid); // pembuka berhenti -> pemain berikutnya yang buka
   return g;
 }
@@ -199,12 +224,13 @@ function deal(pids, lead) {
     hands[p] = d.slice(i * 13, i * 13 + 13).sort((a, b) => a - b);
     if (!hands[p].some(c => rk(c) >= 8 && rk(c) <= 10)) dec[p] = true; // murni: nol J, Q, K
   });
-  let low = -1, start = pids.indexOf(lead);
+  let low = -1, start = pids.indexOf(lead), col = false;
   if (start < 0) {
     low = Math.min(...pids.map(p => hands[p][0]));
     start = pids.findIndex(p => hands[p].includes(low));
+    col = low < 4; // ada kartu 3 yang terbagi -> fase kumpulin 3 (kalau nggak ada, pemegang kartu terendah buka bebas)
   }
-  return { order: pids, hands, s: low, turn: start, last: null, passed: {}, first: low >= 0, over: false, dec: Object.keys(dec).length ? dec : null };
+  return { order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
 }
 
 // ---------- state lokal ----------
@@ -276,10 +302,10 @@ function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : 
 function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan lo. Coba refresh halaman.';
+  if (g.first) { const m3 = hand.filter(c => rk(c) === 0); return cards.length === m3.length && m3.every(c => cards.includes(c)) ? '' : 'Fase kumpulin 3: keluarin semua kartu 3 lo sekaligus (' + m3.length + ' kartu).'; }
   if (bombOf(cards)) return '';
   if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Contoh yang boleh: seri 3+ kartu (tanpa 2), 3 kembar + pasangan, seri satu logo + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
   if (e.t === 'q' || (e.t === 'r' && e.n === 5 && cards.every(c => su(c) === su(cards[0])))) return '';
-  if (g.first && !cards.includes(g.s)) return 'Kombinasi pertama wajib memuat ' + R[rk(g.s)] + S[su(g.s)] + '.';
   if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x') ? '3 kembar/seri dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
 }
@@ -294,7 +320,7 @@ function play(pass) {
 
 // ---------- tampilan ----------
 const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}<b>${S[su(id)]}</b></div>`;
-const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
+const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
   if (!room) return drawHome();
@@ -335,8 +361,9 @@ function drawGame() {
   else if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Menang pakai bom ${last.t === 'q' ? '4 kembar' : 'seri 5 satu logo'}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>` : ''}`;
   else if (pend) center = `<div>Ada kartu murni (tanpa J, Q, K). Game mulai setelah pemain murni memilih.</div>`;
   else if (last) center = `<div>${esc(P[last.p]?.n)} • ${typeName[last.t]}${last.t === 'r' ? ' ' + last.n : ''}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>`;
+  else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
-  const status = g.over ? (g.bomb ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Wajib keluarin ' + R[rk(g.s)] + S[su(g.s)] + ' di kombinasi pertama.' : 'Giliran lo') : `Giliran ${esc(P[cur]?.n)}`;
+  const status = g.over ? (g.bomb ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
   $.innerHTML = `<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
   <div class="opps" style="margin-top:8px">${opps}</div>
   <div class="table">${center}</div>
@@ -345,10 +372,10 @@ function drawGame() {
   <div class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
   <div class="row" style="margin-top:10px">
   ${g.over ? (room.host === me ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
-    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>`}
+    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Bom 4 kembar atau seri 5 satu logo = langsung menang • 3 kembar + pasangan dan seri satu logo (min 3) + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Giliran bergerak ke arah kanan</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Bom 4 kembar atau seri 5 satu logo = langsung menang • 3 kembar + pasangan dan seri satu logo (min 3) + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
@@ -356,6 +383,7 @@ function drawGame() {
   };
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
   if (g.over) { if (room.host === me) again.onclick = start; return; }
+  if (g.first && myTurn) a3.onclick = () => { sel.clear(); mine.filter(c => rk(c) === 0).forEach(c => sel.add(c)); drawGame(); };
   pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
 }
 function leaveGame() {
