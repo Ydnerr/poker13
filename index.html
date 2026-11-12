@@ -76,7 +76,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v11-musik'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v14-bom3'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -94,6 +94,16 @@ function ev(cs) {
     const gs = Object.values(m), tri = gs.find(a => a.length === 3);
     if (gs.length === 2 && tri) return { t: 'f', n, k: Math.max(...tri), k2: Math.max(...c.filter(x => !tri.includes(x))) };
   }
+  if (n === 8) { // 2 x 4 kembar (mis. 3333 + 6666)
+    const m = {}; c.forEach(x => (m[rk(x)] = m[rk(x)] || []).push(x));
+    const gs = Object.values(m);
+    if (gs.length === 2 && gs.every(a => a.length === 4)) return { t: 'd', n, k: top };
+  }
+  if (n === 6) { // 4 kembar + pasangan
+    const m = {}; c.forEach(x => (m[rk(x)] = m[rk(x)] || []).push(x));
+    const gs = Object.values(m), q4 = gs.find(a => a.length === 4), pr = gs.find(a => a.length === 2);
+    if (gs.length === 2 && q4 && pr) return { t: 'g', n, k: Math.max(...q4), k2: Math.max(...pr) };
+  }
   if (n >= 5) { // seri satu logo (min 3 kartu) + pasangan
     const L = n - 2;
     for (let s = 0; s < 4; s++) for (let st = 0; st + L - 1 <= 11; st++) {
@@ -107,17 +117,17 @@ function ev(cs) {
 }
 function beats(a, l) {
   if (!l) return true;
-  if (a.t === l.t && a.n === l.n) return a.k > l.k && (!(a.t === 'f' || a.t === 'x') || a.k2 > l.k2); // 3 kembar/seri + pasangan: angka utama DAN pasangan harus lebih tinggi
-  if (a.t === 'q' && (l.t === 's' || l.t === 'p') && rk(l.k) === 12) return true; // bom potong 2
+  if (a.t === l.t && a.n === l.n) return a.k > l.k && (!(a.t === 'f' || a.t === 'x' || a.t === 'g') || a.k2 > l.k2); // kombinasi + pasangan: angka utama DAN pasangan harus lebih tinggi
   return false;
 }
 
-// Bom instan (game langsung selesai): tepat 4 kartu kembar, atau tepat 5 kartu seri satu logo
-function bombOf(cards) {
-  const n = cards.length;
-  if (n === 4 && cards.every(c => rk(c) === rk(cards[0]))) return { t: 'q', n: 4 };
-  if (n === 5 && cards.every(c => su(c) === su(cards[0]))) { const e = ev(cards); if (e && e.t === 'r') return { t: 'r', n: 5 }; }
-  return null;
+// Bom biasa: 4 kembar / seri 5 satu logo (masing-masing boleh + 1 pasangan). Bom x2: 8 kartu kembar (2 x 4 kembar) atau seri 10+.
+const isBomb = e => e.t === 'q' || e.t === 'g' || (e.t === 'r' && e.n === 5) || (e.t === 'x' && e.n === 7);
+const isDouble = e => e.t === 'd' || (e.t === 'r' && e.n >= 10);
+const twoPlay = l => !!l && (l.c || []).length > 0 && l.c.every(c => rk(c) === 12); // meja isinya cuma kartu 2
+function cuts(e, l) { // bom menimpa kartu 2: game langsung berakhir
+  if (!l || !twoPlay(l)) return false;
+  return l.c.length === 1 ? (isBomb(e) || isDouble(e)) : isDouble(e); // 2 tunggal: bom biasa; 2 kembar: wajib bom x2
 }
 const act = g => g.order.filter(p => !(g.fin || []).includes(p));
 const has3 = (g, p) => (g.hands[p] || []).some(c => rk(c) === 0);
@@ -154,11 +164,6 @@ function move(g, pid, cards, pass) {
     g.hands[pid] = hand.filter(c => rk(c) !== 0);
     const sorted = [...cards].sort((a, b) => a - b);
     addLog(g, { p: pid, c: sorted });
-    if (bombOf(sorted)) { // 4 kartu 3 sekaligus = bom instan
-      g.last = { p: pid, c: sorted, t: 'q', n: 4, k: sorted[3], k2: 0 };
-      g.over = true; g.winner = pid; g.bomb = true; g.fin = [pid];
-      return g;
-    }
     g.last = { p: pid, c: sorted, t: 'c', n: sorted.length, k: sorted[sorted.length - 1], k2: 0 };
     for (let k = 1; k <= g.order.length; k++) { // pemain berikutnya yang masih pegang 3
       const i = (g.turn + k) % g.order.length, p = g.order[i];
@@ -181,15 +186,16 @@ function move(g, pid, cards, pass) {
   }
   const hand = g.hands[pid] || [];
   if (!cards.length || !cards.every(c => hand.includes(c))) return;
-  const e = ev(cards), bb = bombOf(cards);
-  if (!e && !bb) return;
-  if (!bb && !beats(e, last)) return;
+  const e = ev(cards);
+  if (!e) return;
+  const cut = cuts(e, last);
+  if (!cut && !beats(e, last)) return;
   g.hands[pid] = hand.filter(c => !cards.includes(c));
   const sorted = [...cards].sort((a, b) => a - b);
   addLog(g, { p: pid, c: sorted });
   g.first = false;
-  if (bb) { // bom instan: game langsung berakhir
-    g.last = { p: pid, c: sorted, t: bb.t, n: bb.n, k: Math.max(...cards), k2: 0 };
+  if (cut) { // bom menimpa kartu 2: game langsung berakhir, pengeluar bom menang
+    g.last = { p: pid, c: sorted, t: e.t, n: e.n, k: e.k, k2: e.k2 ?? 0 };
     g.over = true; g.winner = pid; g.bomb = true; g.fin = [pid];
     return g;
   }
@@ -311,10 +317,10 @@ function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan lo. Coba refresh halaman.';
   if (g.first) { const m3 = hand.filter(c => rk(c) === 0); return cards.length === m3.length && m3.every(c => cards.includes(c)) ? '' : 'Fase kumpulin 3: keluarin semua kartu 3 lo sekaligus (' + m3.length + ' kartu).'; }
-  if (bombOf(cards)) return '';
   if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Seri harus satu logo semua (3+ kartu berurutan, tanpa 2). Lainnya: pasangan, 3 kembar, 3 kembar + pasangan, seri + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
-  if (e.t === 'q' || (e.t === 'r' && e.n === 5 && cards.every(c => su(c) === su(cards[0])))) return '';
-  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x') ? '3 kembar/seri dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
+  if (cuts(e, last)) return '';
+  if (last && twoPlay(last) && last.c.length >= 2 && (isBomb(e) || e.t === 'q')) return 'Kartu 2 kembar cuma bisa dipotong 8 kartu kembar (2 x 4 kembar, misal 3333 + 6666) atau seri 10 kartu satu logo.';
+  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Angka utama dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
 }
 function play(pass) {
@@ -437,7 +443,7 @@ const FACE = {
   10: SV('<path d="M4 19V9l4.5 4L12 7l3.5 6L20 9v10z"/><rect x="11" y="1" width="2" height="5.5"/><rect x="9.3" y="2.6" width="5.4" height="2"/><rect x="4" y="19.5" width="16" height="2" rx="1"/>') // K: mahkota + salib
 };
 const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}${FACE[rk(id)] ? `<b class="f">${FACE[rk(id)]}<i>${S[su(id)]}</i></b>` : `<b>${S[su(id)]}</b>`}</div>`;
-const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
+const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom 4 kembar', d: '8 kartu kembar (2 x 4)', g: '4 kembar + pasangan', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
   if (!room) return drawHome();
@@ -455,18 +461,23 @@ function drawHome() {
   <h3>Dasar</h3><ul><li>2 sampai 4 pemain, masing-masing dapat 13 kartu. Tujuan: habiskan kartu di tangan duluan.</li>
   <li>Urutan angka: 3 4 5 6 7 8 9 10 J Q K A 2 (2 tertinggi). Urutan logo: ♠ &lt; ♣ &lt; ♦ &lt; ♥.</li></ul>
   <h3>Kombinasi kartu</h3><ul><li>Tunggal, pasangan (2 angka sama), 3 kembar.</li>
-  <li><b>Seri</b>: minimal 3 kartu berurutan, <b>wajib satu logo</b>, tanpa kartu 2.</li>
+  <li><b>Seri</b>: minimal 3 kartu berurutan, <b>wajib satu logo</b>, tanpa kartu 2. Seri lawan boleh beda logo dari yang di meja, asal lebih tinggi dan serinya sendiri satu logo (3♠ 4♠ 5♠ dilawan 6♦ 7♦ 8♦ atau 7♣ 8♣ 9♣).</li>
   <li><b>3 kembar + pasangan</b> (5 kartu), contoh 4 4 4 + 5 5.</li>
   <li><b>Seri satu logo + pasangan</b>, contoh 3♠ 4♠ 5♠ + 7 7.</li>
-  <li>Untuk dua kombinasi bonus di atas, lawannya harus jenis sama dan angka utama <b>dan</b> pasangannya sama-sama lebih tinggi (4 4 4 + 5 5 dilawan 5 5 5 + 6 6).</li></ul>
+  <li><b>4 kembar (+ pasangan)</b>, <b>seri 5 satu logo (+ pasangan)</b>, 8 kartu kembar, dan seri 10: ini bom, lihat di bawah.</li>
+  <li>Untuk semua kombinasi yang pakai pasangan, lawannya harus jenis sama dan angka utama <b>dan</b> pasangannya sama-sama lebih tinggi (4 4 4 + 5 5 dilawan 5 5 5 + 6 6).</li></ul>
   <h3>Jalannya ronde</h3><ul><li>Keluarkan kombinasi sejenis, jumlah sama, dan lebih tinggi, atau lewat. Yang sudah lewat tidak bisa ikut lagi sampai ronde baru.</li>
   <li>Kalau semua lewat, pemain terakhir yang keluarin kartu buka ronde baru dengan kombinasi bebas.</li>
   <li>Giliran bergerak ke arah kanan.</li></ul>
-  <h3>Bom instan</h3><ul><li><b>4 kartu kembar</b> atau <b>seri 5 kartu</b> (satu logo): game langsung berakhir dan pengeluarnya menang. Boleh dikeluarkan kapan saja di giliran sendiri.</li></ul>
-  <h3>Awal game</h3><ul><li><b>Game pertama di room atau setelah bom instan</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
+  <h3>Bom dan kartu 2</h3><ul><li><b>Bom biasa</b> = 4 kartu kembar atau seri 5 kartu satu logo, masing-masing boleh ditambah 1 pasangan.</li>
+  <li><b>Bom x2</b> = 8 kartu kembar (dua set 4 kembar, contoh 3333 + 6666) atau seri 10 kartu satu logo.</li>
+  <li>Kartu <b>2 tunggal</b> di meja bisa dipotong bom biasa atau bom x2. Kartu <b>2 kembar</b> (pasangan 22, 3 kembar, atau 4 kartu 2) cuma bisa dipotong <b>bom x2</b>.</li>
+  <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
+  <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
+  <h3>Awal game</h3><ul><li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
   <li><b>Setelah ada yang kartunya habis atau berhenti karena murni</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
   <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, lo bisa pilih <b>berhenti</b> (juara instan) atau <b>lanjut main</b>.</li></ul>
-  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Game lanjut sampai juara 2, 3, dan 4 ketemu (kecuali kena bom instan).</li></ul>
+  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Game lanjut sampai juara 2, 3, dan 4 ketemu (kecuali game berakhir karena bom memotong 2).</li></ul>
   </details>
   <p class="err">${esc(err)}</p><p class="msg" style="font-size:.8rem">Versi ${VER}</p>`;
   mk.onclick = createRoom; jn.onclick = joinRoom;
@@ -493,9 +504,10 @@ function drawGame() {
   const myTurn = cur === me && !g.over && !pend && !fin.includes(me);
   const mi = g.order.indexOf(me), after = g.order.map((_, k) => g.order[(mi + 1 + k) % g.order.length]).slice(0, g.order.length - 1).reverse(); // pemain berikutnya ada di paling kanan
   const opps = after.map(p => `<div class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}<br>${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
+  const BL = l => l.t === 'r' ? 'seri ' + l.n + ' satu logo' : ({ q: '4 kembar', g: '4 kembar + pasangan', x: 'seri 5 satu logo + pasangan', d: '8 kartu kembar (2 x 4 kembar)' }[l.t] || 'bom');
   let center;
   if (g.over && !g.bomb) center = `<div class="win">Permainan selesai</div>${fin.map((p, i) => `<div>Juara ${i + 1}: <b>${esc(P[p]?.n || '?')}</b>${p === me ? ' (lo)' : ''}</div>`).join('')}`;
-  else if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Menang pakai bom ${last.t === 'q' ? '4 kembar' : 'seri 5 satu logo'}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>` : ''}`;
+  else if (g.over) center = `<div class="win">${g.winner === me ? 'Lo menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Memotong kartu 2 pakai ${BL(last)}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>` : ''}`;
   else if (pend) center = `<div>Ada kartu murni (tanpa J, Q, K). Game mulai setelah pemain murni memilih.</div>`;
   else if (last) center = `<div>${esc(P[last.p]?.n)} • ${typeName[last.t]}${last.t === 'r' ? ' ' + last.n : ''}</div><div class="cards">${last.c.map(c => card(c)).join('')}</div>`;
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
@@ -513,7 +525,7 @@ function drawGame() {
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Seri harus satu logo semua (min 3 kartu) • Bom 4 kembar atau seri 5 kartu = langsung menang • 3 kembar + pasangan dan seri + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
