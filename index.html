@@ -94,7 +94,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v17-dua'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v24'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -136,7 +136,7 @@ function ev(cs) {
 function beats(a, l) {
   if (!l) return true;
   if (twoPlay(l)) return false; // kartu 2 itu teratas: nggak bisa dibales kartu biasa (termasuk 2 lain), cuma bisa dipotong bom
-  if (a.t === l.t && a.n === l.n) return a.k > l.k && (!(a.t === 'f' || a.t === 'x' || a.t === 'g') || a.k2 > l.k2); // kombinasi + pasangan: angka utama DAN pasangan harus lebih tinggi
+  if (a.t === l.t && a.n === l.n) return a.k > l.k; // kombinasi + pasangan: cuma bagian utama (3 kembar / seri / 4 kembar) yang dibandingkan, pasangannya bebas asal kembar
   return false;
 }
 
@@ -219,6 +219,7 @@ function move(g, pid, cards, pass) {
     return g;
   }
   g.last = { p: pid, c: sorted, t: e.t, n: e.n, k: e.k, k2: e.k2 ?? 0 };
+  for (const k in passed) delete passed[k]; // lewat cuma berlaku sejak kartu terakhir keluar: tiap ada yang keluarin kartu, semua pemain dapat giliran lagi (nggak ada auto skip)
   if (!g.hands[pid].length) {
     if (finish(g, pid, 'habis kartu, ')) return g;
     if (!act(g).filter(p => !passed[p]).length) { startRound(g, pid); return g; }
@@ -236,6 +237,7 @@ function decide(g, pid, stop) {
   g.fin = g.fin || [];
   delete g.dec[pid];
   if (!stop) { addLog(g, { p: pid, m: 'kartu murni, lanjut main' }); return g; }
+  // murni berhenti = langsung masuk juara berikutnya (juara 1 kalau yang pertama), game tetap lanjut buat rebutan juara sisanya
   g.hands[pid] = [];
   g.stopped = g.stopped || {}; g.stopped[pid] = true;
   if (finish(g, pid, 'kartu murni, berhenti: ')) return g;
@@ -265,6 +267,91 @@ function deal(pids, lead) {
   }
   return { v: VER, order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
 }
+
+// ---------- bot (lawan komputer): 0 Mudah, 1 Sedang, 2 Susah, 3 Master ----------
+const BOTN = ['Budi', 'Sari', 'Joko'], LVN = ['Mudah', 'Sedang', 'Susah', 'Master'];
+function pickK(a, k) { const r = []; (function f(i, cur) { if (cur.length === k) { r.push(cur.slice()); return; } for (let j = i; j < a.length; j++) { cur.push(a[j]); f(j + 1, cur); cur.pop(); } })(0, []); return r; }
+function combos(hand) { // semua kombinasi valid dari tangan
+  const c = [...hand].sort((a, b) => a - b), by = {}, out = [], prs = [], sers = [];
+  c.forEach(x => (by[rk(x)] = by[rk(x)] || []).push(x));
+  const rs = Object.keys(by).map(Number);
+  rs.forEach(r => { for (let k = 1; k <= by[r].length; k++) pickK(by[r], k).forEach(x => { out.push(x); if (k === 2) prs.push(x); }); });
+  for (let s = 0; s < 4; s++) {
+    const cs = c.filter(x => su(x) === s && rk(x) < 12);
+    for (let i = 0; i < cs.length; i++) for (let j = i + 2; j < cs.length && rk(cs[j]) - rk(cs[i]) === j - i; j++) sers.push(cs.slice(i, j + 1));
+  }
+  out.push(...sers);
+  rs.forEach(r => {
+    if (by[r].length >= 3) pickK(by[r], 3).forEach(t => prs.forEach(p => { if (rk(p[0]) !== r) out.push(t.concat(p)); }));
+    if (by[r].length === 4) {
+      prs.forEach(p => { if (rk(p[0]) !== r) out.push(by[r].concat(p)); });
+      rs.forEach(r2 => { if (r2 > r && by[r2].length === 4) out.push(by[r].concat(by[r2])); });
+    }
+  });
+  sers.forEach(sr => prs.forEach(p => { if (!p.some(x => sr.includes(x))) out.push(sr.concat(p)); }));
+  return out.map(cs => ({ cs, e: ev(cs) })).filter(o => o.e);
+}
+function unseenOf(g, pid) { // kartu yang belum kelihatan (bukan di tangan bot dan belum keluar)
+  const seen = new Set(g.hands[pid] || []);
+  (g.log || []).forEach(e => (e.c || []).forEach(x => seen.add(x)));
+  return [...Array(52).keys()].filter(x => !seen.has(x));
+}
+function bombPossible(u) { // mungkinkah lawan punya bom (4 kembar / seri 5 satu logo)
+  const n = {}; u.forEach(x => { n[rk(x)] = (n[rk(x)] || 0) + 1; });
+  if (Object.values(n).some(v => v === 4)) return true;
+  for (let s = 0; s < 4; s++) {
+    const ids = new Set(u.filter(x => su(x) === s).map(rk));
+    for (let st = 0; st <= 7; st++) if ([0, 1, 2, 3, 4].every(i => ids.has(st + i))) return true;
+  }
+  return false;
+}
+function turnsLeft(hand) { // perkiraan jumlah giliran buat ngabisin kartu: ambil kombinasi non-bom terbesar berulang kali
+  let h = hand, n = 0;
+  while (h.length && n < 14) {
+    let b = null; for (const o of combos(h)) if (!isBomb(o.e) && !isDouble(o.e) && (!b || o.cs.length > b.cs.length || (o.cs.length === b.cs.length && o.e.k < b.e.k))) b = o;
+    if (!b) b = { cs: [h[0]] };
+    h = h.filter(x => !b.cs.includes(x)); n++;
+  }
+  return n;
+}
+function botMove(g, pid, lv) {
+  const hand = g.hands[pid] || [], last = g.last || null;
+  if (g.first) return { cards: hand.filter(c => rk(c) === 0) };
+  const leg = combos(hand).filter(o => cuts(o.e, last) || beats(o.e, last));
+  if (!leg.length) return { pass: true };
+  const has2 = o => o.cs.some(c => rk(c) === 12), bomb = o => isBomb(o.e) || isDouble(o.e);
+  const cutters = last && twoPlay(last) ? leg.filter(o => cuts(o.e, last)) : [];
+  if (cutters.length && (lv > 0 || Math.random() < .5)) return { cards: cutters.sort((a, b) => a.cs.length - b.cs.length)[0].cs }; // bom motong 2 = menang
+  const fin = lv > 0 && leg.find(o => o.cs.length === hand.length);
+  if (fin) return { cards: fin.cs };
+  if (lv === 0) { if (last && Math.random() < .35) return { pass: true }; return { cards: leg[Math.random() * leg.length | 0].cs }; }
+  const minOpp = Math.min(99, ...act(g).filter(p => p !== pid).map(p => (g.hands[p] || []).length)), danger = minOpp <= 2;
+  const cnt = {}; hand.forEach(c => { cnt[rk(c)] = (cnt[rk(c)] || 0) + 1; });
+  const un = lv === 3 ? unseenOf(g, pid) : null, bp = un ? bombPossible(un) : true;
+  let best = null, bs = 1e9;
+  for (const o of leg) {
+    const rs = {}; o.cs.forEach(c => { rs[rk(c)] = (rs[rk(c)] || 0) + 1; });
+    let s = o.e.k >> 2;
+    if (lv === 1) { if (has2(o) || bomb(o)) s += 20; }
+    else {
+      if (has2(o)) s += lv === 3 ? (bp ? 30 : 4) : 12; // 2 yang keluar bisa dipotong bom: master cek dulu
+      if (bomb(o) && !(last && twoPlay(last))) s += danger ? 0 : 14; // bom disimpen buat motong 2
+      for (const r in rs) { const rem = cnt[r] - rs[r]; if (rem > 0 && cnt[r] >= 2) s += cnt[r] >= 3 ? 5 : 3; } // jangan pecahin pasangan / tiga kembar
+      s -= o.cs.length * (lv === 3 ? 2.5 : 1.5);
+      if (!last && lv >= 2) { if (minOpp === 1 && o.cs.length === 1) s += 8; if (minOpp === 2 && o.cs.length === 2) s += 5; }
+      if (!last && lv === 3 && o.e.t === 's') { const k = o.e.k; if (rk(k) === 12 ? !bp : !un.some(x => x > k)) s -= 5; } // kartu yang pasti nggak kebales
+      if (last && last.n === 1 && minOpp === 1) s = -o.e.k; // lawan sisa 1 kartu: keluarin yang tertinggi
+    }
+    o.s = s;
+    if (s < bs) { bs = s; best = o; }
+  }
+  if (lv === 3) { // master: dari 6 kandidat terbaik, pilih yang bikin sisa kartu paling cepat habis
+    let bb = 1e9; for (const o of leg.slice().sort((a, b) => a.s - b.s).slice(0, 6)) { const v = o.s + 8 * turnsLeft(hand.filter(x => !o.cs.includes(x))); if (v < bb) { bb = v; best = o; } }
+  }
+  if (last && !cutters.length && (has2(best) || bomb(best)) && !(danger || hand.length <= 4) && (lv >= 2 || Math.random() < .7)) return { pass: true };
+  return { cards: best.cs };
+}
+const botDecide = lv => lv === 0 ? Math.random() < .5 : true; // murni: bot Mudah acak, lainnya langsung berhenti (juara)
 
 // ---------- state lokal ----------
 let me = localStorage.getItem('k13pid');
@@ -315,9 +402,11 @@ function enter(c) {
     room = s.val();
     if (!room || !(room.players || {})[me]) { leave(true); return; }
     draw();
+    botTick();
   });
 }
 function leave(silent) {
+  clearTimeout(botT); botT = null;
   if (ref) ref.off();
   chatOff();
   if (!silent && room && room.status === 'lobby') {
@@ -333,6 +422,40 @@ function start() {
   const lead = pg && pg.over && !pg.bomb && pg.fin && pids.includes(pg.fin[0]) ? pg.fin[0] : null;
   ref.update({ status: 'play', game: deal(pids, lead) });
 }
+// driver bot: cuma host yang menjalankan bot (bot = pemain dengan flag bot di room.players)
+let botT = null;
+const isBot = p => !!((room && room.players || {})[p] || {}).bot;
+function botTick() {
+  if (!room || !room.bot || room.host !== me || room.status === 'lobby' || botT) return;
+  const g = room.game; if (!g || g.over || g.v !== VER) return;
+  const lv = room.bot.lv | 0, dec = g.dec || {}, bd = Object.keys(dec).find(isBot);
+  if (bd) { botT = setTimeout(() => { botT = null; ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : decide(x, bd, botDecide(lv)), () => botTick(), false); }, 600); return; }
+  if (Object.keys(dec).length) return; // nunggu pemain murni (manusia) memilih
+  const cur = g.order[g.turn];
+  if (!isBot(cur) || (g.fin || []).includes(cur)) return;
+  botT = setTimeout(() => {
+    botT = null;
+    const g2 = room && room.game;
+    if (!g2 || g2.over || g2.order[g2.turn] !== cur) return botTick();
+    const m = botMove(g2, cur, lv);
+    const run = (cards, pass, next) => ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : move(x, cur, cards, pass), (e, ok) => { if (!ok && next) next(); else botTick(); }, false);
+    run(m.cards || [], !!m.pass, () => run([], true, () => run([Math.min(...(g2.hands[cur] || [0]))], false))); // cadangan: lewat, lalu kartu terkecil
+  }, 800 + Math.random() * 700);
+}
+async function createBotRoom() {
+  const name = document.getElementById('nm').value.trim();
+  if (!name) return setErr('Isi nama dulu.');
+  localStorage.setItem('k13name', name);
+  const lv = +document.getElementById('bl').value, t = Date.now(), players = { [me]: { n: name, t } };
+  BOTN.forEach((n, i) => { players['bot' + (i + 1)] = { n: 'Bot ' + n, t: t + i + 1, bot: true }; });
+  const pids = Object.keys(players);
+  for (let i = 0; i < 5; i++) {
+    const c = genCode();
+    const r = await db.ref('rooms/' + c).transaction(v => v === null ? { host: me, status: 'play', created: t, bot: { lv }, players, game: deal(pids, null) } : undefined);
+    if (r.committed) return enter(c);
+  }
+  setErr('Gagal bikin room, coba lagi.');
+}
 function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : g.v !== VER ? undefined : decide(g, me, stop)); }
 function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
@@ -342,7 +465,7 @@ function why(g, cards) {
   if (cuts(e, last)) return '';
   if (last && twoPlay(last)) return last.c.length === 1 ? 'Kartu 2 nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom (4 kembar, seri 5 satu logo, atau bom x2).' : 'Kartu 2 kembar nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom x2 (8 kartu kembar atau seri 10).';
   if (last && twoPlay(last) && last.c.length >= 2 && (isBomb(e) || e.t === 'q')) return 'Kartu 2 kembar cuma bisa dipotong 8 kartu kembar (2 x 4 kembar, misal 3333 + 6666) atau seri 10 kartu satu logo.';
-  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Angka utama dan pasangannya dua-duanya harus lebih tinggi dari yang di meja.' : 'Kartunya kurang tinggi dari yang di meja.');
+  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '') + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Bagian utamanya (3 kembar / seri / 4 kembar) harus lebih tinggi dari yang di meja. Pasangannya bebas.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
 }
 function play(pass) {
@@ -529,6 +652,8 @@ function drawHome() {
   $.innerHTML = `<h1>Kartu 13</h1><h2>Tiến lên online, 2 sampai 4 pemain</h2>
   <div class="box"><label>Nama lo<input id="nm" maxlength="14" value="${esc(nm)}"></label></div>
   <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
+  <div class="box"><b>Lawan bot (4 pemain)</b><label>Tingkat<select id="bl" style="width:100%;padding:10px;margin-top:4px;border-radius:10px;background:#0000002e;color:inherit;border:1px solid #ffffff33;font:inherit"><option value="0">Mudah</option><option value="1">Sedang</option><option value="2" selected>Susah</option><option value="3">Master</option></select></label>
+  <button id="bt" class="ghost" style="width:100%;margin-top:6px">Main lawan bot</button></div>
   <div class="box"><label>Atau masuk pakai kode<input id="cd" maxlength="5" inputmode="numeric" pattern="[0-9]*" placeholder="mis. 48215"></label>
   <button id="jn" class="ghost" style="width:100%;margin-top:6px">Join room</button></div>
     <details class="box rules" open><summary>Aturan main</summary>
@@ -539,23 +664,25 @@ function drawHome() {
   <li><b>3 kembar + pasangan</b> (5 kartu), contoh 4 4 4 + 5 5.</li>
   <li><b>Seri satu logo + pasangan</b>, contoh 3♠ 4♠ 5♠ + 7 7.</li>
   <li><b>4 kembar (+ pasangan)</b>, <b>seri 5 satu logo (+ pasangan)</b>, 8 kartu kembar, dan seri 10: ini bom, lihat di bawah.</li>
-  <li>Untuk semua kombinasi yang pakai pasangan, lawannya harus jenis sama dan angka utama <b>dan</b> pasangannya sama-sama lebih tinggi (4 4 4 + 5 5 dilawan 5 5 5 + 6 6).</li></ul>
-  <h3>Jalannya ronde</h3><ul><li>Keluarkan kombinasi sejenis, jumlah sama, dan lebih tinggi, atau lewat. Yang sudah lewat tidak bisa ikut lagi sampai ronde baru.</li>
+  <li>Untuk semua kombinasi yang pakai pasangan, lawannya harus jenis sama dan bagian utamanya (3 kembar, seri, atau 4 kembar) lebih tinggi. <b>Pasangannya bebas</b> angkanya, asal kembar (4 4 4 + 6 6 boleh dilawan 6 6 6 + 4 4).</li></ul>
+  <h3>Jalannya ronde</h3><ul><li>Keluarkan kombinasi sejenis, jumlah sama, dan lebih tinggi, atau lewat. Lewat cuma berlaku untuk giliran itu: kalau ada yang keluarin kartu lagi, semua pemain dapat giliran lagi.</li>
   <li>Kalau semua lewat, pemain terakhir yang keluarin kartu buka ronde baru dengan kombinasi bebas.</li>
   <li>Giliran bergerak ke arah kanan.</li></ul>
   <h3>Bom dan kartu 2</h3><ul><li><b>Bom biasa</b> = 4 kartu kembar atau seri 5 kartu satu logo, masing-masing boleh ditambah 1 pasangan.</li>
   <li><b>Bom x2</b> = 8 kartu kembar (dua set 4 kembar, contoh 3333 + 6666) atau seri 10 kartu satu logo.</li>
-  <li>Kartu 2 adalah yang tertinggi dan <b>nggak bisa dibales</b> kartu 2 lain atau kombinasi biasa. Pemain lain cuma bisa lewat atau memotong dengan bom.</li>
+  <li>Kartu 2 adalah yang tertinggi dan <b>nggak bisa dibales</b> kartu 2 lain atau kombinasi biasa. Pemain lain cuma bisa lewat atau memotong dengan bom, termasuk yang tadi sudah lewat di ronde itu.</li>
   <li>Kartu <b>2 tunggal</b> di meja bisa dipotong bom biasa atau bom x2. Kartu <b>2 kembar</b> (pasangan 22, 3 kembar, atau 4 kartu 2) cuma bisa dipotong <b>bom x2</b>.</li>
   <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
   <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
+  <h3>Lawan bot</h3><ul><li>Dari halaman awal pilih <b>Main lawan bot</b>: lo lawan 3 bot, tingkat Mudah, Sedang, Susah, atau Master. Aturannya sama persis dengan main online.</li></ul>
   <h3>Awal game</h3><ul><li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
-  <li><b>Setelah ada yang kartunya habis atau berhenti karena murni</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
-  <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, lo bisa pilih <b>berhenti</b> (juara instan) atau <b>lanjut main</b>.</li></ul>
-  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Game lanjut sampai juara 2, 3, dan 4 ketemu (kecuali game berakhir karena bom memotong 2).</li></ul>
+  <li><b>Setelah game selesai (semua juara ketemu, termasuk yang berhenti karena murni)</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
+  <h3>Kartu murni</h3><ul><li>Kalau lo nggak dapat J, Q, K sama sekali, di awal game lo bisa pilih <b>berhenti</b> atau <b>lanjut main</b>.</li>
+  <li>Berhenti = lo langsung jadi juara berikutnya (juara 1 kalau yang pertama) dan game tetap lanjut: pemain lain rebutan juara sisanya sampai kartunya habis beneran.</li></ul>
+  <h3>Juara</h3><ul><li>Pemain yang kartunya habis duluan jadi juara 1. Tiap juara harus ngabisin kartunya beneran, nggak ada berhenti di tengah. Juara terakhir otomatis yang masih punya sisa kartu. Game lanjut sampai semua juara ketemu (kecuali game berakhir karena bom memotong 2).</li></ul>
   </details>
   <p class="err">${esc(err)}</p><p class="msg" style="font-size:.8rem">Versi ${VER}</p>`;
-  mk.onclick = createRoom; jn.onclick = joinRoom;
+  mk.onclick = createRoom; jn.onclick = joinRoom; bt.onclick = createBotRoom;
   if (rc) { document.getElementById('cd').value = rc; }
 }
 function drawLobby() {
@@ -600,7 +727,7 @@ function drawGame() {
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Seri harus satu logo semua (min 3 kartu) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar / seri 10) • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
