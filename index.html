@@ -656,6 +656,25 @@ function vLevel(A) {
   let t = 0; for (let i = 0; i < A.buf.length; i++) { const d = (A.buf[i] - 128) / 128; t += d * d; }
   return Math.sqrt(t / A.buf.length);
 }
+// hemat kuota TURN: Opus ~24 kbps (suara tetap jernih), DTX = nggak kirim data pas hening, FEC = tahan paket hilang
+const VOICE_KBPS = 24;
+function vOpus(sdp) {
+  const m = sdp.match(/a=rtpmap:(\d+) opus\/48000/i); if (!m) return sdp;
+  const pt = m[1], add = 'maxaveragebitrate=' + VOICE_KBPS * 1000 + ';stereo=0;sprop-stereo=0;useinbandfec=1;usedtx=1;maxplaybackrate=24000';
+  const re = new RegExp('(a=fmtp:' + pt + ' )([^\\r\\n]*)');
+  if (re.test(sdp)) return sdp.replace(re, (_, a, b) => a + b.replace(/;?(maxaveragebitrate|stereo|sprop-stereo|useinbandfec|usedtx|maxplaybackrate)=[^;]*/g, '').replace(/^;/, '') + ';' + add);
+  return sdp.replace(new RegExp('(a=rtpmap:' + pt + ' [^\\r\\n]*\\r?\\n)'), '$1a=fmtp:' + pt + ' ' + add + '\r\n');
+}
+function vCap(pc) { // batasi bitrate kirim
+  try {
+    pc.getSenders().forEach(sn => {
+      if (!sn.track || sn.track.kind !== 'audio') return;
+      const pr = sn.getParameters(); if (!pr.encodings || !pr.encodings.length) pr.encodings = [{}];
+      pr.encodings[0].maxBitrate = VOICE_KBPS * 1000;
+      sn.setParameters(pr).catch(() => {});
+    });
+  } catch (_) {}
+}
 function vSend(to, k, d) { if (vCode) db.ref(vpath('vsig/' + to)).push({ f: me, k, d: JSON.stringify(d) }); }
 function vDrop(q) {
   const P = vPeers[q]; if (!P) return;
@@ -678,13 +697,14 @@ function vMkPeer(q, vt) { // pemain ber-id lebih kecil yang kirim offer (biar ng
   };
   pc.onconnectionstatechange = () => {
     vUI();
+    if (pc.connectionState === 'connected') vCap(pc);
     if (pc.connectionState !== 'failed') return;
     setTimeout(() => {
       if (vPeers[q] !== P || pc.connectionState !== 'failed') return;
       vDrop(q); if (me < q && vMembers[q]) vMkPeer(q, vMembers[q]);
     }, 1500);
   };
-  if (me < q) pc.createOffer().then(o => pc.setLocalDescription(o)).then(() => vSend(q, 'offer', pc.localDescription.toJSON())).catch(() => {});
+  if (me < q) pc.createOffer().then(o => pc.setLocalDescription({ type: o.type, sdp: vOpus(o.sdp) })).then(() => vSend(q, 'offer', pc.localDescription.toJSON())).catch(() => {});
   return P;
 }
 function vOnSig(snap) {
@@ -694,7 +714,7 @@ function vOnSig(snap) {
   let P = vPeers[m.f];
   if (m.k === 'offer') {
     if (!P || P.pc.remoteDescription) P = vMkPeer(m.f, vMembers[m.f] || 0);
-    P.q = P.q.then(async () => { await P.pc.setRemoteDescription(d); await P.pc.setLocalDescription(await P.pc.createAnswer()); vSend(m.f, 'answer', P.pc.localDescription.toJSON()); }).catch(() => {});
+    P.q = P.q.then(async () => { await P.pc.setRemoteDescription(d); { const an = await P.pc.createAnswer(); await P.pc.setLocalDescription({ type: an.type, sdp: vOpus(an.sdp) }); } vSend(m.f, 'answer', P.pc.localDescription.toJSON()); }).catch(() => {});
   } else if (P && m.k === 'answer') P.q = P.q.then(() => P.pc.setRemoteDescription(d)).catch(() => {});
   else if (P && m.k === 'ice') P.q = P.q.then(() => P.pc.addIceCandidate(d)).catch(() => {});
 }
