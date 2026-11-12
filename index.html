@@ -123,6 +123,10 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
 #tut .coach{border-left:3px solid var(--gold);padding-left:10px}
 #tut .gc .c{cursor:pointer}#tut .gc .c.sel{transform:translateY(-12px);outline:2px solid var(--gold)}#tut .gc .c.gh{box-shadow:0 0 0 3px #7be3a0}
 #tut .tn{display:flex;gap:8px;align-items:center;margin-top:10px}#tut .tn span{flex:1;text-align:center;color:var(--mute);font-size:.85rem}
+.c{width:calc(var(--ch)*.657);background:none;border:0;padding:0;border-radius:3px}
+.c.mini{width:35px;height:53px;margin:0 -3px 0 0;padding:0;border-radius:2px}
+.c img{width:100%;height:100%;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}
+.cr{color:var(--gold)}
 </style>
 </head>
 <body>
@@ -137,7 +141,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
   <p id="gdesc" class="msg" style="font-size:.85rem;margin:14px 0 0">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu, cuma angka 3 sampai 10) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar) • Habis kartu pakai 2 = ngebom diri sendiri, kalah, game diulang dari kumpulin 3 • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • <span id="gver"></span></p>
 </section>
-<footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude</footer>
+<footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude<br>Card art: <a class="cr" href="https://www.vecteezy.com" target="_blank" rel="noopener">Vecteezy.com</a></footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
 <button id="vfab" class="fab vfab" hidden aria-label="Voice chat">🎤</button>
@@ -1077,15 +1081,9 @@ document.getElementById('tb').onclick = () => { localStorage.setItem('k13big', b
 barLabels();
 
 // ---------- tampilan ----------
-// gambar kartu J, Q, K (SVG inline, warna ikut warna kartu)
-const SV = p => `<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
-const FACE = {
-  8: SV('<path d="M12 1.5 14.2 14h-4.4z"/><rect x="6.5" y="14" width="11" height="2.2" rx="1"/><rect x="10.8" y="16.2" width="2.4" height="4"/><circle cx="12" cy="21.3" r="1.7"/>'), // J: pedang
-  9: SV('<path d="M4 19 5 10.5 9 14.5 12 8.5 15 14.5 19 10.5 20 19z"/><circle cx="5" cy="8.8" r="1.8"/><circle cx="12" cy="6.3" r="2"/><circle cx="19" cy="8.8" r="1.8"/><rect x="4" y="19.5" width="16" height="2" rx="1"/>'), // Q: mahkota bulat
-  10: SV('<path d="M4 19V9l4.5 4L12 7l3.5 6L20 9v10z"/><rect x="11" y="1" width="2" height="5.5"/><rect x="9.3" y="2.6" width="5.4" height="2"/><rect x="4" y="19.5" width="16" height="2" rx="1"/>') // K: mahkota + salib
-};
+// gambar kartu: cards/<id>.svg (Vecteezy.com), id = angka*4 + logo
 const cardsOf = (cs, extra = '') => { const e = cs.length > 4 && ev(cs), pr = e && ['f', 'x', 'g'].includes(e.t); return cs.map((c, i) => (pr && i === cs.length - 2 ? '<span style="display:inline-block;width:22px"></span>' : '') + card(c, extra)).join(''); };
-const card = (id, extra = '') => `<div class="c ${su(id) > 1 ? 'r' : ''} ${extra}" data-id="${id}">${R[rk(id)]}${S[su(id)]}${FACE[rk(id)] ? `<b class="f">${FACE[rk(id)]}<i>${S[su(id)]}</i></b>` : `<b>${S[su(id)]}</b>`}</div>`;
+const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.svg" alt="" draggable="false"></div>`;
 // ---------- tutorial aturan (halaman geser, contoh pakai kartu asli) ----------
 const cid = t => R.indexOf(t.slice(0, -1)) * 4 + S.indexOf(t.slice(-1));
 const TUT = [
