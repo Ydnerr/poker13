@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Kartu 13</title>
 <style>
-:root{--felt:#12382b;--felt2:#0c2a20;--ink:#f3ecd8;--gold:#e0b44c;--red:#c8342b;--card:#fbf7ea;--mute:#8fb0a2}
+:root{--felt:#12382b;--felt2:#0c2a20;--ink:#f3ecd8;--gold:#e0b44c;--red:#c8342b;--card:#fbf7ea;--mute:#8fb0a2;--cw:46px;--ch:68px;--cm:-4px;--cf:1rem;--cb:1.3rem;--cs:26px;--ci:.8rem}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,var(--felt),var(--felt2));color:var(--ink);font:16px/1.4 Georgia,'Times New Roman',serif}
 main{max-width:720px;margin:0 auto;padding:16px}
@@ -28,9 +28,9 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .opp.pass{opacity:.5}
 .table{min-height:130px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;margin:12px 0}
 .cards{display:flex;flex-wrap:wrap;justify-content:center}
-.c{width:46px;height:68px;background:var(--card);color:#1a1a1a;border-radius:6px;border:1px solid #0006;margin:0 -4px 8px 0;padding:3px 4px;font-weight:bold;font-size:1rem;line-height:1.1;cursor:default;user-select:none;position:relative}
+.c{width:var(--cw);height:var(--ch);background:var(--card);color:#1a1a1a;border-radius:6px;border:1px solid #0006;margin:0 var(--cm) 8px 0;padding:3px 4px;font-weight:bold;font-size:var(--cf);line-height:1.1;cursor:default;user-select:none;position:relative}
 .c.r{color:var(--red)}
-.c b{display:block;font-size:1.3rem;font-weight:normal;text-align:center;margin-top:6px}
+.c b{display:block;font-size:var(--cb);font-weight:normal;text-align:center;margin-top:6px}
 .hand .c{cursor:pointer;transition:transform .12s}
 .hand .c.sel{transform:translateY(-14px);outline:2px solid var(--gold)}
 .me{padding:10px;border-radius:12px;border:1px solid transparent}
@@ -38,8 +38,8 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .err{color:#ff9d92}
 .c.mini{width:30px;height:42px;font-size:.72rem;margin:0 -2px 0 0;padding:2px 3px;border-radius:4px}
 .c.mini b{display:none}
-.c b.f{margin-top:2px;line-height:1}.c b.f svg{width:26px;height:26px;display:block;margin:0 auto}.c b.f i{display:block;font-style:normal;font-size:.8rem;line-height:1;text-align:center;margin-top:1px}
-.bar{max-width:720px;margin:0 auto;padding:8px 16px 0;display:flex;gap:8px;justify-content:flex-end}
+.c b.f{margin-top:2px;line-height:1}.c b.f svg{width:var(--cs);height:var(--cs);display:block;margin:0 auto}.c b.f i{display:block;font-style:normal;font-size:var(--ci);line-height:1;text-align:center;margin-top:1px}
+.bar{max-width:720px;margin:0 auto;padding:8px 16px 0;display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
 .bar button{padding:4px 10px;font-size:.8rem;font-weight:normal}
 .rules{font-size:.92rem;color:#e6dfc8}.rules summary{cursor:pointer;color:var(--gold);font-size:1.05rem;margin-bottom:6px}
 .rules h3{font-size:.95rem;margin:12px 0 2px;color:var(--gold);font-weight:bold}.rules ul{margin:2px 0;padding-left:20px}.rules li{margin:3px 0}
@@ -74,13 +74,48 @@ li{margin:4px 0}
 .hand .c{-webkit-touch-callout:none;touch-action:manipulation}
 .hand .c.ph{opacity:.3}
 .c.dc{position:fixed;z-index:60;margin:0;pointer-events:none;transition:none;transform:scale(1.12) rotate(-4deg);box-shadow:0 8px 18px #000a}
-.hbar{margin-top:6px;gap:6px}.hbar button{padding:4px 10px;font-size:.85rem;font-weight:normal}
-.hint{font-size:.78rem;margin:6px 0 0}
+.acts{gap:6px}.acts button{padding:10px 4px;font-size:.85rem}
+body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:1rem}
 @media(prefers-reduced-motion:reduce){.hand .c{transition:none}.rx{animation:rxfade 2.4s linear forwards}@keyframes rxfade{0%{opacity:0}10%{opacity:1}100%{opacity:0}}}
+
+/* ===== desktop / laptop: layar lebar, game muat satu layar tanpa scroll, chat jadi panel samping ===== */
+@media(hover:hover){.hand .c:not(.sel):not(.ph):hover{transform:translateY(-6px)}}
+@media(min-width:960px){
+  :root{--cw:62px;--ch:90px;--cm:-6px;--cf:1.2rem;--cb:1.7rem;--cs:38px;--ci:.95rem}
+  body.big{--cw:74px;--ch:107px;--cm:-8px;--cf:1.4rem;--cb:2rem;--cs:46px;--ci:1.1rem}
+  body{height:100vh;height:100dvh;min-height:0;overflow:hidden;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+  body:has(#chat:not([hidden])){grid-template-columns:minmax(0,1fr) 320px}
+  .bar{grid-column:1/-1;grid-row:1;max-width:none;width:100%;padding:8px 16px 0}
+  main{grid-column:1;grid-row:2;width:100%;max-width:760px;margin:0 auto;overflow:auto;padding:10px 24px 14px}
+  main.game{max-width:none;display:flex;flex-direction:column}
+  main.game p.msg{margin:2px 0}
+  main.game .opps{flex:0 0 auto;justify-content:center;gap:12px;margin-top:6px!important}
+  main.game .opp{flex:0 1 210px;padding:10px 12px}
+  main.game .table{flex:1 1 auto;min-height:150px;margin:10px 0;background:#0000002e;border:1px solid #ffffff14;border-radius:22px;font-size:1.05rem}
+  main.game .me{flex:0 0 auto}
+  .acts{justify-content:center;gap:10px}.acts button{flex:0 0 auto;min-width:112px;padding:10px 18px;font-size:1rem}
+  #chat{grid-column:2;grid-row:2;position:relative;display:flex;flex-direction:column;min-height:0;max-width:none;margin:0;padding:62px 14px 14px;overflow:auto;border-left:1px solid #ffffff1a;background:#00000026}
+  #chat[hidden]{display:none}
+  #chat .ht{position:absolute;top:20px;left:14px;margin:0}
+  #chat .cmsg{flex:1 1 auto;height:auto;min-height:140px}
+  .pw{grid-column:1/-1;grid-row:3;padding:2px 16px 4px}
+  #cfab,#ctoast{display:none!important}
+  .fab.vfab,.fab.rfab{width:36px;height:36px;font-size:1.05rem;bottom:auto;top:calc(46px + env(safe-area-inset-top,0px))}
+  .fab.rfab{right:12px}.fab.vfab{right:56px}
+  .rbar{bottom:auto;top:calc(90px + env(safe-area-inset-top,0px));right:12px;max-width:296px}
+}
+@media(min-width:960px) and (max-height:820px){
+  :root{--cw:54px;--ch:78px;--cm:-6px;--cf:1.05rem;--cb:1.45rem;--cs:32px;--ci:.85rem}
+  body.big{--cw:62px;--ch:90px;--cm:-6px;--cf:1.2rem;--cb:1.7rem;--cs:38px;--ci:.95rem}
+}
+@media(min-width:960px) and (max-height:660px){
+  :root{--cw:46px;--ch:68px;--cm:-4px;--cf:1rem;--cb:1.3rem;--cs:26px;--ci:.8rem}
+  body.big{--cw:54px;--ch:79px;--cm:-6px;--cf:1.1rem;--cb:1.5rem;--cs:30px;--ci:.9rem}
+}
 </style>
 </head>
 <body>
-<div class="bar"><button id="tm" class="ghost"></button><button id="ts" class="ghost"></button></div>
+<div class="bar"><button id="tm" class="ghost"></button><button id="ts" class="ghost"></button><button id="tb" class="ghost"></button></div>
 <div id="srv" class="srv p-on" role="status" aria-label="Status server">● ...</div>
 <main id="app"></main>
 <section id="chat" class="chat" hidden>
@@ -117,7 +152,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v30'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v33'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
@@ -393,7 +428,7 @@ const botDecide = lv => lv === 0 ? Math.random() < .5 : true; // murni: bot Muda
 let me = localStorage.getItem('k13pid');
 if (!me) { me = 'p' + Math.random().toString(36).slice(2, 10); localStorage.setItem('k13pid', me); }
 let lastLog = -1, code = null, room = null, ref = null, sel = new Set(), err = '', sig = '';
-let order = [], drag = null, pendingDraw = false, dragEnd = 0; // urutan kartu di tangan: diatur sendiri sama pemain, cuma lokal (nggak dikirim ke server)
+let fly = null, order = [], drag = null, pendingDraw = false, dragEnd = 0; // urutan kartu di tangan: diatur sendiri sama pemain, cuma lokal (nggak dikirim ke server)
 
 function setErr(m) { err = m; draw(); }
 function genCode() {
@@ -444,7 +479,7 @@ function enter(c) {
     // presence (heartbeat) dan chat nggak perlu gambar ulang seluruh meja: cukup update penanda
     const { presence, chat, voice, vsig, react, ...rest } = room, ns = JSON.stringify(rest);
     if (ns !== sig) { sig = ns; draw(); } else paintPres();
-    botTick();
+    botTick(); turnBuzz();
     vUI();
   });
 }
@@ -480,6 +515,17 @@ function driver() {
   const ps = room.players || {};
   const ids = Object.keys(ps).filter(id => !ps[id].bot).sort((x, y) => x === room.host ? -1 : y === room.host ? 1 : ps[x].t - ps[y].t);
   return ids.find(id => id === me || !isAfk(id)) || null;
+}
+// ---------- giliran lo: getar tipis sekali (nggak ada timer, nggak ada hitung mundur, nggak ada jalan otomatis) ----------
+let buzzKey = '';
+function turnBuzz() {
+  const g = room && room.game;
+  if (!g || room.status === 'lobby' || g.over || g.v !== VER || (g.dec && Object.keys(g.dec).length)) { buzzKey = ''; return; }
+  if (g.order[g.turn] !== me || (g.fin || []).includes(me)) { buzzKey = ''; return; }
+  const key = (g.log || []).length + ':' + g.turn;
+  if (key === buzzKey) return;
+  buzzKey = key;
+  try { navigator.vibrate && navigator.vibrate(25); } catch (_) {}
 }
 const hostNow = () => driver() === me; // "host efektif": host asli kalau masih aktif, kalau nggak pemain aktif berikutnya
 function botTick() {
@@ -1007,12 +1053,16 @@ const Snd = (() => {
 })();
 ['pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, () => Snd.init(), { passive: true }));
 document.addEventListener('visibilitychange', () => Snd.hidden(document.hidden));
+const bigOn = () => localStorage.getItem('k13big') === '1';
 function barLabels() {
+  document.getElementById('tb').textContent = '🔠 Kartu: ' + (bigOn() ? 'besar' : 'normal');
   document.getElementById('tm').textContent = '🎵 Musik: ' + (Snd.on.music ? 'nyala' : 'mati');
   document.getElementById('ts').textContent = '🔊 Suara: ' + (Snd.on.sfx ? 'nyala' : 'mati');
 }
 document.getElementById('tm').onclick = () => { Snd.init(); Snd.set('music', !Snd.on.music); barLabels(); };
 document.getElementById('ts').onclick = () => { Snd.init(); Snd.set('sfx', !Snd.on.sfx); barLabels(); };
+document.body.classList.toggle('big', bigOn());
+document.getElementById('tb').onclick = () => { localStorage.setItem('k13big', bigOn() ? '0' : '1'); document.body.classList.toggle('big', bigOn()); barLabels(); };
 barLabels();
 
 // ---------- tampilan ----------
@@ -1029,6 +1079,7 @@ const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom 4 kemb
 
 function draw() {
   if (drag) { if (drag.on) { pendingDraw = true; return; } endDrag(); } // lagi nyeret kartu: tunda gambar ulang sampai dilepas
+  $.className = room && room.status !== 'lobby' ? 'game' : ''; // layout desktop: mode game dibikin satu layar
   if (!room) return drawHome();
   if (room.status === 'lobby') return drawLobby();
   drawGame();
@@ -1061,8 +1112,11 @@ function drawHome() {
   <li>Bom yang menimpa kartu 2 di meja: game langsung berakhir dan pengeluar bom menang.</li>
   <li><b>Ngebom diri sendiri</b>: kalau kartu terakhir lo (yang bikin kartu habis) mengandung kartu 2, lo <b>kalah</b> dan game langsung dibatalkan (nggak ada pemenang). Game berikutnya mulai lagi dari fase kumpulin 3.</li>
   <li>Bom yang keluar bukan di atas kartu 2 cuma kombinasi biasa dan game lanjut. Bom biasa cuma bisa dilawan jenis yang sama dengan nilai lebih tinggi.</li></ul>
-  <h3>Atur kartu</h3><ul><li>Kartu lo <b>nggak diurutin otomatis</b>, dibagi acak dan lo atur sendiri. Tahan sebentar lalu geser kartu ke posisi yang lo mau (di HP), atau tinggal geser pakai mouse. Bisa juga pilih kartu lalu tekan <b>Kiri / Kanan</b>. Tombol <b>Urutkan</b> kalau mau dirapikan dari kecil ke besar. Urutan cuma kelihatan di layar lo sendiri, berlaku di online maupun lawan bot.</li></ul>
+  <h3>Atur kartu</h3><ul><li>Kartu lo <b>nggak diurutin otomatis</b>: dibagi acak dan lo atur sendiri. Di HP, tahan kartu sebentar lalu geser ke posisi yang lo mau. Di PC, tinggal drag pakai mouse. Tombol <b>Kelompokkan</b> (opsional) merapikan kartu jadi tunggal, pasangan, 3 kembar, seri, lalu 4 kembar. Urutan cuma kelihatan di layar lo sendiri, berlaku di online maupun lawan bot.</li>
+  <li>Kartu terlalu kecil? Tekan <b>Kartu: normal</b> di bagian atas buat ganti ke kartu besar.</li></ul>
   <h3>Lawan bot</h3><ul><li>Dari halaman awal pilih <b>Main lawan bot</b>: lo lawan 3 bot, tingkat Mudah, Sedang, Susah, atau Master. Aturannya sama persis dengan main online.</li></ul>
+  <h3>Getar giliran</h3><ul><li>Di HP, lo dapat <b>getaran tipis</b> sekali tiap kali giliran lo tiba (tergantung perangkat dan browser). Nggak ada timer: lo bebas mikir selama apa pun.</li></ul>
+  <h3>Di PC / laptop</h3><ul><li>Layar lebar: game muat satu layar dan chat ada di panel samping. Pintasan: <b>Enter</b> = Keluarkan, <b>P</b> = Lewat, <b>Esc</b> = Batal pilih. Kartu bisa di-drag pakai mouse.</li></ul>
   <h3>Awal game</h3><ul><li><b>4 kartu 2 di tangan awal = kalah instan.</b> Game langsung dibatalkan dan diulang dari fase kumpulin 3.</li>
   <li><b>Game pertama di room atau setelah game berakhir karena bom memotong 2 atau habis kartu pakai 2</b>: fase kumpulin 3. Tiap pemain yang punya angka 3 keluarin semua kartu 3-nya sekaligus. Setelah semua 3 keluar, pemain yang keluarin 3♠ jalan duluan (kalau 3♠ nggak kebagi, pemegang 3 terendah).</li>
   <li><b>Setelah game selesai (semua juara ketemu, termasuk yang berhenti karena murni)</b>: juara 1 jalan duluan, kombinasi bebas.</li></ul>
@@ -1093,11 +1147,32 @@ function syncOrder(hs) { // urutan pemain dipertahankan; kartu dibagi baru = aca
   if (k.length < hs.length) k = shuffled(hs);
   order = k; saveOrder(); return order;
 }
-function shiftSel(dir) { // geser kartu terpilih satu langkah
-  const a = order, n = a.length;
-  if (dir < 0) { for (let i = 1; i < n; i++) if (sel.has(a[i]) && !sel.has(a[i - 1])) [a[i - 1], a[i]] = [a[i], a[i - 1]]; }
-  else { for (let i = n - 2; i >= 0; i--) if (sel.has(a[i]) && !sel.has(a[i + 1])) [a[i + 1], a[i]] = [a[i], a[i + 1]]; }
-  saveOrder(); drawGame();
+function groupHand(hs) { // kelompokkan: kartu tunggal, pasangan, 3 kembar, seri, lalu 4 kembar (kiri ke kanan, kecil ke besar)
+  const by = {}, used = new Set(), G = { s: [], p: [], t: [], r: [], q: [] };
+  hs.forEach(c => (by[rk(c)] = by[rk(c)] || []).push(c));
+  const rest = r => by[r].filter(c => !used.has(c));
+  for (const r in by) if (by[r].length === 4) { G.q.push(by[r]); by[r].forEach(c => used.add(c)); }
+  for (const r in by) { const a = rest(r); if (a.length === 3) { G.t.push(a); a.forEach(c => used.add(c)); } }
+  for (let sx = 0; sx < 4; sx++) { // seri satu logo, min 3 kartu berurutan, tanpa angka 2
+    let run = [];
+    const flush = () => { if (run.length >= 3) { G.r.push(run); run.forEach(c => used.add(c)); } run = []; };
+    for (let r = 0; r <= 11; r++) { const c = r * 4 + sx; if (hs.includes(c) && !used.has(c)) run.push(c); else flush(); }
+    flush();
+  }
+  for (const r in by) { const a = rest(r); if (a.length === 2) { G.p.push(a); a.forEach(c => used.add(c)); } }
+  hs.filter(c => !used.has(c)).sort((a, b) => a - b).forEach(c => G.s.push([c]));
+  const byLow = (a, b) => a[0] - b[0];
+  return [].concat(...G.s.sort(byLow), ...G.p.sort(byLow), ...G.t.sort(byLow), ...G.r.sort(byLow), ...G.q.sort(byLow));
+}
+function flyIn(p) { // animasi kartu meluncur dari pemain ke meja: 1 elemen, cuma transform + opacity (ringan buat HP low end)
+  try {
+    if (!Element.prototype.animate || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const box = document.querySelector('.table .cards'); if (!box) return;
+    const src = p === me ? document.getElementById('hand') : document.querySelector('.opp[data-p="' + p + '"]'); if (!src) return;
+    const a = src.getBoundingClientRect(), b = box.getBoundingClientRect();
+    const dx = (a.left + a.width / 2) - (b.left + b.width / 2), dy = (a.top + a.height / 2) - (b.top + b.height / 2);
+    box.animate([{ transform: `translate(${dx}px,${dy}px) scale(.55)`, opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 220, easing: 'cubic-bezier(.2,.8,.3,1)' });
+  } catch (_) {}
 }
 function onHandDown(e) {
   const el = e.target.closest('.c'); if (!el || (e.pointerType === 'mouse' && e.button !== 0) || order.length < 2) return;
@@ -1142,12 +1217,19 @@ function endDrag() {
   if (pendingDraw) { pendingDraw = false; draw(); }
 }
 function abortDrag() { if (drag) { clearTimeout(drag.timer); if (drag.cl) drag.cl.remove(); drag = null; } pendingDraw = false; }
+document.addEventListener('keydown', e => { // pintasan PC: Enter = Keluarkan, P = Lewat, Esc = Batal pilih
+  const t = e.target || {}; if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
+  const b = id => { const x = document.getElementById(id); return x && !x.disabled ? x : null; };
+  let x = null;
+  if (e.key === 'Enter' && t.tagName !== 'BUTTON') x = b('pl'); else if (e.key === 'Escape') x = b('cl'); else if (e.key === 'p' || e.key === 'P') x = b('ps');
+  if (x) { e.preventDefault(); x.click(); }
+});
 document.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); // nyeret kartu: jangan ikut scroll halaman
 
 function drawGame() {
   const g = room.game; if (!g) return;
   const ln = (g.log || []).length; // efek suara saat ada kartu keluar (dari siapa pun)
-  if (lastLog >= 0 && ln > lastLog) { const e = g.log[ln - 1]; if ((g.bomb || g.self2) && g.over) Snd.boom(); else if (e.c) Snd.play(e.c.length); else if (e.x) Snd.pass(); }
+  if (lastLog >= 0 && ln > lastLog) { const e = g.log[ln - 1]; if ((g.bomb || g.self2) && g.over) Snd.boom(); else if (e.c) Snd.play(e.c.length); else if (e.x) Snd.pass(); if (e.c) fly = e.p; }
   lastLog = ln;
   const P = room.players, hands = g.hands || {}, passed = g.passed || {}, last = g.last || null;
   const dec = g.dec || {}, pend = Object.keys(dec).length, fin = g.fin || [], rank = p => fin.indexOf(p) + 1, stopped = g.stopped || {};
@@ -1173,16 +1255,15 @@ function drawGame() {
   <p class="msg">${status}</p><p class="msg err">${esc(err)}</p>
   ${dec[me] ? `<div class="box"><b>Kartu murni!</b> Lo nggak dapat J, Q, K sama sekali. Berhenti sekarang = juara instan, atau lanjut main.<div class="row" style="margin-top:8px"><button id="bh">Berhenti, juara</button><button id="kt" class="ghost">Lanjut main</button></div></div>` : ''}
   <div data-p="${me}" class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
-  ${mine.length > 1 ? `<div class="row hbar"><button id="ml" class="ghost" ${sel.size ? '' : 'disabled'} aria-label="Geser kartu terpilih ke kiri">◀ Kiri</button><button id="mr" class="ghost" ${sel.size ? '' : 'disabled'} aria-label="Geser kartu terpilih ke kanan">Kanan ▶</button><button id="mo" class="ghost">Urutkan</button></div><p class="msg hint">Tahan lalu geser kartu buat atur urutan sendiri. Atau pilih kartu lalu pakai tombol Kiri / Kanan.</p>` : ''}
-  <div class="row" style="margin-top:10px">
+  <div class="row acts" style="margin-top:10px">
   ${g.over ? (hostNow() ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
-    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
+    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${mine.length > 1 ? '<button id="kp" class="ghost">Kelompokkan</button>' : ''}${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
 `;
+  if (fly != null) { const f = fly; fly = null; flyIn(f); }
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.oncontextmenu = e => e.preventDefault();
   hand.onpointerdown = onHandDown; hand.onpointermove = onHandMove; hand.onpointerup = hand.onpointercancel = endDrag;
-  if (mine.length > 1) { ml.onclick = () => shiftSel(-1); mr.onclick = () => shiftSel(1); mo.onclick = () => { order = order.slice().sort((a, b) => a - b); saveOrder(); drawGame(); }; }
   hand.onclick = e => {
     if (Date.now() - dragEnd < 350) return; // klik susulan habis nyeret kartu: abaikan
     const el = e.target.closest('.c'); if (!el) return;
@@ -1191,6 +1272,7 @@ function drawGame() {
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
   if (g.over) { if (hostNow()) again.onclick = start; return; }
   if (g.first && myTurn) a3.onclick = () => { sel.clear(); mine.filter(c => rk(c) === 0).forEach(c => sel.add(c)); drawGame(); };
+  if (mine.length > 1) kp.onclick = () => { order = groupHand(order); saveOrder(); drawGame(); };
   pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
 }
 function leaveGame() {
