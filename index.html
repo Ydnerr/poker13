@@ -70,7 +70,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v8-autoupdate'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v9-satulogo'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
 const $ = document.getElementById('app');
@@ -300,7 +300,7 @@ function start() {
   const lead = pg && pg.over && !pg.bomb && pg.fin && pids.includes(pg.fin[0]) ? pg.fin[0] : null;
   ref.update({ status: 'play', game: deal(pids, lead) });
 }
-function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : decide(g, me, stop)); }
+function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : g.v !== VER ? undefined : decide(g, me, stop)); }
 function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan lo. Coba refresh halaman.';
@@ -313,8 +313,9 @@ function why(g, cards) {
 }
 function play(pass) {
   const cards = [...sel];
+  if (room.game && room.game.v !== VER) return setErr('Versi halaman lo beda dengan game ini. Tunggu update otomatis atau hard refresh dulu.');
   if (!pass && room.game) { const w = why(room.game, cards); if (w) return setErr(w); }
-  ref.child('game').transaction(g => g === null ? g : move(g, me, cards, pass), (e, ok) => {
+  ref.child('game').transaction(g => g === null ? g : g.v !== VER ? undefined : move(g, me, cards, pass), (e, ok) => {
     if (!ok) { err = pass ? 'Tidak bisa lewat sekarang.' : 'Kombinasi tidak valid / tidak cukup tinggi.'; draw(); }
     else { err = ''; sel.clear(); }
   }, false);
@@ -336,7 +337,7 @@ function drawHome() {
   <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
   <div class="box"><label>Atau masuk pakai kode<input id="cd" maxlength="5" inputmode="numeric" pattern="[0-9]*" placeholder="mis. 48215"></label>
   <button id="jn" class="ghost" style="width:100%;margin-top:6px">Join room</button></div>
-  <p class="err">${esc(err)}</p>`;
+  <p class="err">${esc(err)}</p><p class="msg" style="font-size:.8rem">Versi ${VER}</p>`;
   mk.onclick = createRoom; jn.onclick = joinRoom;
   if (rc) { document.getElementById('cd').value = rc; }
 }
@@ -378,7 +379,7 @@ function drawGame() {
     : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
   </div></div>
   <div class="hist"><b class="ht">Riwayat meja (${(g.log || []).length})</b><div class="hl">${(g.log || []).slice().reverse().map(e => `<div class="he"><span>${esc(P[e.p]?.n || '?')}</span>${e.m ? `<i>${esc(e.m)}</i>` : e.x ? '<i>lewat</i>' : `<span class="cards">${e.c.map(c => card(c, 'mini')).join('')}</span>`}</div>`).join('') || '<i>Belum ada kartu keluar</i>'}</div></div>
-  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Seri harus satu logo semua (min 3 kartu) • Bom 4 kembar atau seri 5 kartu = langsung menang • 3 kembar + pasangan dan seri + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan</p>`;
+  <p class="msg" style="font-size:.85rem">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Sekop &lt; Keriting &lt; Wajik &lt; Hati • Bom 4 kembar bisa potong 2 • Seri harus satu logo semua (min 3 kartu) • Bom 4 kembar atau seri 5 kartu = langsung menang • 3 kembar + pasangan dan seri + pasangan juga boleh • Kartu murni = tanpa J, Q, K • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • ${VER}</p>`;
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.onclick = e => {
     const el = e.target.closest('.c'); if (!el) return;
@@ -402,7 +403,6 @@ function leaveGame() {
   const hash = t => { let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return String(h); };
   const own = norm(document.scripts[document.scripts.length - 1].textContent || '');
   async function check() {
-    if (sel.size) return; // jangan ganggu pemain yang lagi milih kartu
     try {
       const r = await fetch(location.pathname + '?t=' + Date.now(), { cache: 'no-store' });
       if (!r.ok) return;
@@ -418,7 +418,7 @@ function leaveGame() {
     } catch (e) { /* offline: abaikan */ }
   }
   setTimeout(check, 1500);
-  setInterval(check, 45000);
+  setInterval(check, 20000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
 })();
 
