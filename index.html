@@ -121,7 +121,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
 #tut .tc{display:flex;flex-wrap:wrap;align-items:flex-end}
 #tut .gm{min-height:1.4em;font-weight:bold}#tut .gm.ok{color:#7be3a0}#tut .gm.bad{color:#ff8a80}
 #tut .coach{border-left:3px solid var(--gold);padding-left:10px}
-#tut .gc .c{cursor:pointer;width:46px;height:68px}#tut .gc .c.sel{transform:translateY(-12px);outline:2px solid var(--gold)}#tut .gc .c.gh{box-shadow:0 0 0 3px #7be3a0}
+#tut .gc .c{cursor:pointer}#tut .gc .c.sel{transform:translateY(-12px);outline:2px solid var(--gold)}#tut .gc .c.gh{box-shadow:0 0 0 3px #7be3a0}
 #tut .tn{display:flex;gap:8px;align-items:center;margin-top:10px}#tut .tn span{flex:1;text-align:center;color:var(--mute);font-size:.85rem}
 </style>
 </head>
@@ -137,7 +137,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
   <p id="gdesc" class="msg" style="font-size:.85rem;margin:14px 0 0">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu, cuma angka 3 sampai 10) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar) • Habis kartu pakai 2 = ngebom diri sendiri, kalah, game diulang dari kumpulin 3 • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • <span id="gver"></span></p>
 </section>
-<footer class="pw">Powered by GitHub and Claude AI</footer>
+<footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude</footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
 <button id="vfab" class="fab vfab" hidden aria-label="Voice chat">🎤</button>
@@ -163,7 +163,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v38'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v40'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
