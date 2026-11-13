@@ -1188,7 +1188,7 @@ function draw() {
 function drawHome() {
   const nm = localStorage.getItem('k13name') || '', rc = localStorage.getItem('k13room') || '';
   $.innerHTML = `<h1>Kartu 13</h1><h2>Poker13 online, 2 sampai 4 pemain</h2>
-  <div class="box"><label>Nama lo<input id="nm" maxlength="14" value="${esc(nm)}"></label></div>
+  <div class="box"><label>Isi nama<input id="nm" maxlength="14" value="${esc(nm)}" placeholder="Ketik nama lo di sini" autocomplete="nickname"></label></div>
   <div class="box"><button id="mk" style="width:100%">Buat room baru</button></div>
   <div class="box"><b>Lawan bot (4 pemain)</b><label>Tingkat<select id="bl" style="width:100%;padding:10px;margin-top:4px;border-radius:10px;background:#0000002e;color:inherit;border:1px solid #ffffff33;font:inherit"><option value="0">Mudah</option><option value="1">Sedang</option><option value="2" selected>Susah</option><option value="3">Master</option></select></label>
   <button id="bt" class="ghost" style="width:100%;margin-top:6px">Main lawan bot</button>
