@@ -149,7 +149,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
   <div class="row cin"><input id="cin" maxlength="140" placeholder="Ketik pesan..." autocomplete="off" aria-label="Pesan chat"><button id="csend">Kirim</button></div>
   <p id="gdesc" class="msg" style="font-size:.85rem;margin:14px 0 0">Urutan: 3 4 5 6 7 8 9 10 J Q K A 2 • Logo nggak ikut dibandingkan (angka sama nggak bisa saling kalahin), cuma buat nentuin 3♠ di fase kumpulin 3 • Seri harus satu logo semua (min 3 kartu, cuma angka 3 sampai 10) • Bom yang menimpa kartu 2 = langsung menang (2 tunggal: 4 kembar / seri 5; 2 kembar: 8 kartu kembar) • Habis kartu pakai 2 = ngebom diri sendiri, kalah, game diulang dari kumpulin 3 • Kartu murni (tanpa J, Q, K) boleh berhenti = langsung jadi juara (game lanjut) • Game wajib-3: semua kartu 3 dikeluarkan sekaligus di awal • Giliran bergerak ke arah kanan • <span id="gver"></span></p>
 </section>
-<footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude<br>Card art: <a class="cr" href="https://www.vecteezy.com" target="_blank" rel="noopener">Vecteezy.com</a></footer>
+<footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude<br>Card art: <a class="cr" href="https://www.vecteezy.com" target="_blank" rel="noopener">Vecteezy.com</a><br><a id="fpsT" class="cr" href="#">Meter FPS: mati</a></footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
 <div id="arn" class="arn" role="status" hidden></div>
@@ -176,7 +176,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.1'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.2'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1491,18 +1491,25 @@ function leaveGame() {
   } else draw();
 })();
 document.getElementById('tt').onclick = openTut;
-// meter FPS kecil di pojok kiri bawah. Nyalain: tambah ?fps=1 di URL (tersimpan). Matiin: ?fps=0
-(function fpsMeter() {
-  const qf = new URLSearchParams(location.search).get('fps');
-  try { if (qf === '1') localStorage.setItem('k13fps', '1'); else if (qf === '0') localStorage.removeItem('k13fps'); } catch (_) {}
-  let on = false; try { on = localStorage.getItem('k13fps') === '1'; } catch (_) {}
-  if (!on) return;
-  const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;left:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:99;font:11px/1 monospace;color:#7be3a0;background:#000b;padding:4px 6px;border-radius:6px;pointer-events:none';
-  document.body.appendChild(el);
+// meter FPS kecil di pojok kiri bawah. Nyalain/matiin lewat tulisan "Meter FPS" di footer paling bawah (atau ?fps=1 / ?fps=0 di URL). Pilihan tersimpan.
+let fpsEl = null, fpsRaf = 0;
+function fpsSet(on) {
+  try { on ? localStorage.setItem('k13fps', '1') : localStorage.removeItem('k13fps'); } catch (_) {}
+  const b = document.getElementById('fpsT'); if (b) b.textContent = 'Meter FPS: ' + (on ? 'nyala' : 'mati');
+  if (!on) { cancelAnimationFrame(fpsRaf); if (fpsEl) fpsEl.remove(); fpsEl = null; return; }
+  if (fpsEl) return;
+  fpsEl = document.createElement('div'); fpsEl.textContent = 'mengukur...';
+  fpsEl.style.cssText = 'position:fixed;left:6px;top:calc(6px + env(safe-area-inset-top,0px));z-index:99;font:12px/1 monospace;color:#7be3a0;background:#000c;padding:5px 7px;border-radius:6px;pointer-events:none';
+  document.body.appendChild(fpsEl);
   let f = 0, t0 = performance.now(), last = t0, worst = 0;
-  const loop = t => { f++; worst = Math.max(worst, t - last); last = t; if (t - t0 >= 1000) { el.textContent = Math.round(f * 1000 / (t - t0)) + ' fps | terburuk ' + Math.round(worst) + ' ms'; f = 0; worst = 0; t0 = t; } requestAnimationFrame(loop); };
-  requestAnimationFrame(loop);
+  const loop = t => { f++; worst = Math.max(worst, t - last); last = t; if (t - t0 >= 1000 && fpsEl) { fpsEl.textContent = Math.round(f * 1000 / (t - t0)) + ' fps | terburuk ' + Math.round(worst) + ' ms'; f = 0; worst = 0; t0 = t; } fpsRaf = requestAnimationFrame(loop); };
+  fpsRaf = requestAnimationFrame(loop);
+}
+(function () {
+  const qf = new URLSearchParams(location.search).get('fps'); let on = false;
+  try { on = qf === '1' || (qf !== '0' && localStorage.getItem('k13fps') === '1'); } catch (_) {}
+  fpsSet(on);
+  document.getElementById('fpsT').onclick = e => { e.preventDefault(); fpsSet(!fpsEl); };
 })();
 </script>
 </body>
