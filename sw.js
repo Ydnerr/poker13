@@ -2,10 +2,10 @@
    Buka kedua dan seterusnya jadi cepat dan hemat kuota. index.html SENGAJA nggak disentuh,
    jadi auto-update halaman tetap jalan seperti biasa.
    Naikin V kalau mau maksa semua orang buang cache lama. */
-const V = 'k13-assets-v1';
+const V = 'k13-assets-v2';
 const FB = ['https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js', 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js'];
-const LOCAL = ['cards/back.svg', 'cover/bg-portrait.svg', 'cover/bg-landscape.svg'];
-for (let i = 0; i < 52; i++) LOCAL.push('cards/' + i + '.svg');
+const LOCAL = ['cards/back.webp', 'cover/bg-portrait.svg', 'cover/bg-landscape.svg'];
+for (let i = 0; i < 52; i++) LOCAL.push('cards/' + i + '.webp');
 
 self.addEventListener('install', e => {
   self.skipWaiting();

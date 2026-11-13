@@ -180,7 +180,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.6'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.7'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1154,15 +1154,15 @@ barLabels();
 })();
 
 // ---------- tampilan ----------
-// gambar kartu: cards/<id>.svg (Vecteezy.com), id = angka*4 + logo
+// gambar kartu: cards/<id>.webp (hasil render dari SVG Vecteezy.com, 264x402), id = angka*4 + logo. File .svg asli tetap jadi cadangan kalau .webp nggak ada
 const cardsOf = (cs, extra = '') => { const e = cs.length > 4 && ev(cs), pr = e && ['f', 'x', 'g'].includes(e.t); return cs.map((c, i) => (pr && i === cs.length - 2 ? '<span style="display:inline-block;width:22px"></span>' : '') + card(c, extra)).join(''); };
-const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.svg" alt="" draggable="false" decoding="async"></div>`;
-const _bk = new Image(); _bk.decoding = 'async'; _bk.src = 'cards/back.svg'; if (_bk.decode) _bk.decode().catch(() => {}); // preload + decode punggung kartu (dipakai animasi kartu keluar)
+const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.webp" alt="" draggable="false" decoding="async" onerror="this.onerror=null;this.src=this.src.replace('.webp','.svg')"></div>`;
+const _bk = new Image(); _bk.decoding = 'async'; _bk.src = 'cards/back.webp'; if (_bk.decode) _bk.decode().catch(() => {}); // preload + decode punggung kartu (dipakai animasi kartu keluar)
 // preload + decode 52 kartu sekali (cicil 4 per jeda) biar gambar nggak di-render ulang tiap gambar ulang meja
 const _pre = []; let preDone = false;
 function preloadCards() {
   if (preDone) return; preDone = true; let i = 0;
-  const step = () => { for (let n = 0; n < 4 && i < 52; n++, i++) { const im = new Image(); im.decoding = 'async'; im.src = 'cards/' + i + '.svg'; _pre.push(im); if (im.decode) im.decode().catch(() => {}); } if (i < 52) setTimeout(step, 120); };
+  const step = () => { for (let n = 0; n < 4 && i < 52; n++, i++) { const im = new Image(); im.decoding = 'async'; im.src = 'cards/' + i + '.webp'; _pre.push(im); if (im.decode) im.decode().catch(() => {}); } if (i < 52) setTimeout(step, 120); };
   step();
 }
 // ---------- tutorial aturan (halaman geser, contoh pakai kartu asli) ----------
@@ -1336,13 +1336,13 @@ function groupHand(hs) { // kelompokkan: kartu tunggal, pasangan, 3 kembar, seri
   const byLow = (a, b) => a[0] - b[0];
   return [].concat(...G.s.sort(byLow), ...G.p.sort(byLow), ...G.t.sort(byLow), ...G.r.sort(byLow), ...G.q.sort(byLow));
 }
-function flyIn(p) { // kartu meluncur dari pemain ke meja sebagai punggung kartu (cards/back.svg), baru dibalik sesudah sampai: transform + opacity aja (ringan buat HP low end)
+function flyIn(p) { // kartu meluncur dari pemain ke meja sebagai punggung kartu (cards/back.webp), baru dibalik sesudah sampai: transform + opacity aja (ringan buat HP low end)
   try {
     if (!Element.prototype.animate || document.hidden || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const box = document.querySelector('.table .cards'); if (!box) return;
     const src = p === me ? document.getElementById('hand') : document.querySelector('.opp[data-p="' + p + '"]'); if (!src) return;
     const cs = [...box.querySelectorAll('.c')];
-    cs.forEach(c => { c.style.willChange = 'transform'; const k = document.createElement('img'); k.className = 'bk'; k.src = 'cards/back.svg'; k.alt = ''; k.draggable = false; k.decoding = 'sync'; c.appendChild(k); }); // tutup dulu; will-change: tiap kartu dapat layer sendiri dari awal, jadi flip cuma nempelin layer (nggak gambar ulang)
+    cs.forEach(c => { c.style.willChange = 'transform'; const k = document.createElement('img'); k.className = 'bk'; k.src = 'cards/back.webp'; k.onerror = () => { k.onerror = null; k.src = 'cards/back.svg'; }; k.alt = ''; k.draggable = false; k.decoding = 'sync'; c.appendChild(k); }); // tutup dulu; will-change: tiap kartu dapat layer sendiri dari awal, jadi flip cuma nempelin layer (nggak gambar ulang)
     const reveal = () => cs.forEach((c, i) => { // dibalik satu-satu: sisi punggung menyempit, lalu muka kartu melebar
       const k = c.querySelector('.bk'); if (!k) return;
       const half = (f, t, o) => c.animate([{ transform: 'perspective(500px) rotateY(' + f + 'deg)' }, { transform: 'perspective(500px) rotateY(' + t + 'deg)' }], o);
