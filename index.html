@@ -11,6 +11,7 @@
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,var(--felt),var(--felt2));color:var(--ink);font:16px/1.4 Georgia,'Times New Roman',serif}
 :root{--bg-p:url('cover/bg-portrait.svg');--bg-l:url('cover/bg-landscape.svg');--dim:linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4))} /* --dim = redup background: .4 = 40% gelap, naikin biar makin redup */
 /* Background: gambar 6:19 buat portrait, 19:6 buat landscape. Gambar ada di folder cover/ (root repo). Mau ganti? Timpa file di folder itu, atau ubah --bg-p dan --bg-l */
+html{-webkit-tap-highlight-color:transparent}button,a,select,input,.c,.fab{touch-action:manipulation}body{overscroll-behavior-y:contain}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--dim),var(--bg-p) center/cover no-repeat}
 @media (orientation:landscape){body::before{background-image:var(--dim),var(--bg-l)}}
 main{max-width:720px;margin:0 auto;padding:16px}
@@ -79,7 +80,7 @@ li{margin:4px 0}
 .win{text-align:center;font-size:1.5rem;color:var(--gold)}
 .hand .c{-webkit-touch-callout:none;touch-action:manipulation}
 .hand .c.ph{opacity:.3}
-.c.dc{position:fixed;z-index:60;margin:0;pointer-events:none;transition:none;transform:scale(1.12) rotate(-4deg);box-shadow:0 8px 18px #000a}
+.c.dc{position:fixed;left:0;top:0;z-index:60;margin:0;pointer-events:none;transition:none;will-change:transform;transform:scale(1.12) rotate(-4deg);box-shadow:0 4px 10px #0009}
 .acts{gap:6px}.acts button{padding:10px 4px;font-size:.85rem}
 body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:1rem}
 @media(prefers-reduced-motion:reduce){.hand .c{transition:none}.rx{animation:rxfade 2.4s linear forwards}@keyframes rxfade{0%{opacity:0}10%{opacity:1}100%{opacity:0}}}
@@ -175,7 +176,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v43'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v44'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
@@ -488,28 +489,43 @@ async function joinRoom() {
   if (!r.committed || !r.snapshot.val()) return setErr(reason || 'Gagal join.');
   enter(c);
 }
+const ROOM_KEYS = ['players', 'host', 'status', 'game', 'bot'];
 function enter(c) {
   lastLog = -1; code = c; err = ''; sel.clear(); sig = ''; order = [];
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
+  preloadCards();
   chatOn(c);
   reactOn(c);
   presOn();
-  ref.on('value', s => {
-    room = s.val();
-    if (!room || !(room.players || {})[me]) { leave(true); return; }
-    pres = room.presence || {};
-    // presence (heartbeat) dan chat nggak perlu gambar ulang seluruh meja: cukup update penanda
-    const { presence, chat, voice, vsig, react, ...rest } = room, ns = JSON.stringify(rest);
-    if (ns !== sig) { sig = ns; draw(); } else paintPres();
-    botTick(); turnBuzz();
-    vUI();
+  // Dengerin bagian room yang dipakai meja aja (players, host, status, game, bot) + presence terpisah.
+  // chat, voice, sinyal WebRTC, dan reaksi punya listener sendiri, jadi nggak ikut ke-download tiap ada perubahan.
+  const myRef = ref, parts = {}, ldd = new Set(), lastJ = {}; let q = false;
+  const flush = () => {
+    q = false; if (ref !== myRef || ROOM_KEYS.some(k => !ldd.has(k))) return; // tunggu semua bagian awal masuk dulu
+    const ps = parts.players;
+    if (!ps || !ps[me]) { leave(true); return; } // room dibubarkan / kita udah nggak terdaftar
+    room = { players: ps, host: parts.host, status: parts.status, game: parts.game, bot: parts.bot, presence: pres };
+    draw(); botTick(); turnBuzz(); vUI();
+  };
+  ROOM_KEYS.forEach(k => myRef.child(k).on('value', s => {
+    if (ref !== myRef) return;
+    const v = s.val(), j = JSON.stringify(v);
+    if (ldd.has(k) && j === lastJ[k]) return; // nggak berubah (mis. event lokal sebelum konfirmasi server)
+    lastJ[k] = j; parts[k] = v; ldd.add(k);
+    if (!q) { q = true; Promise.resolve().then(flush); } // gabung perubahan beberapa bagian dalam satu gambar ulang
+  }));
+  myRef.child('presence').on('value', s => { // heartbeat: cukup update penanda online, nggak gambar ulang meja
+    if (ref !== myRef) return;
+    pres = s.val() || {};
+    if (!room) return;
+    room.presence = pres; paintPres(); botTick(); vUI();
   });
 }
 function leave(silent) {
   clearTimeout(botT); botT = null; arnHide(); arnKey = '';
   presOff(); sig = '';
-  if (ref) ref.off();
+  if (ref) { ref.off(); [...ROOM_KEYS, 'presence'].forEach(k => ref.child(k).off()); }
   chatOff(); reactOff(); voiceOff();
   if (!silent && room && room.status === 'lobby') {
     if (room.host === me) ref.remove(); else { ref.child('players/' + me).remove(); ref.child('presence/' + me).remove(); }
@@ -936,7 +952,7 @@ function tick() {
 }
 function presOn() {
   presOff();
-  hbT = setInterval(beat, 5000); tickT = setInterval(tick, 2000);
+  hbT = setInterval(beat, 8000); tickT = setInterval(tick, 2000);
   if (conn) presUp();
 }
 function presOff() {
@@ -1102,8 +1118,15 @@ barLabels();
 // ---------- tampilan ----------
 // gambar kartu: cards/<id>.svg (Vecteezy.com), id = angka*4 + logo
 const cardsOf = (cs, extra = '') => { const e = cs.length > 4 && ev(cs), pr = e && ['f', 'x', 'g'].includes(e.t); return cs.map((c, i) => (pr && i === cs.length - 2 ? '<span style="display:inline-block;width:22px"></span>' : '') + card(c, extra)).join(''); };
-const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.svg" alt="" draggable="false"></div>`;
+const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.svg" alt="" draggable="false" decoding="async"></div>`;
 new Image().src = 'cards/back.svg'; // preload punggung kartu (dipakai animasi kartu keluar)
+// preload + decode 52 kartu sekali (cicil 4 per jeda) biar gambar nggak di-render ulang tiap gambar ulang meja
+const _pre = []; let preDone = false;
+function preloadCards() {
+  if (preDone) return; preDone = true; let i = 0;
+  const step = () => { for (let n = 0; n < 4 && i < 52; n++, i++) { const im = new Image(); im.decoding = 'async'; im.src = 'cards/' + i + '.svg'; _pre.push(im); if (im.decode) im.decode().catch(() => {}); } if (i < 52) setTimeout(step, 120); };
+  step();
+}
 // ---------- tutorial aturan (halaman geser, contoh pakai kartu asli) ----------
 const cid = t => R.indexOf(t.slice(0, -1)) * 4 + S.indexOf(t.slice(-1));
 const TUT = [
@@ -1302,7 +1325,7 @@ function onHandDown(e) {
 function dragStart() {
   const d = drag, h = document.getElementById('hand'); if (!d || !h) return;
   d.on = true; const r = d.el.getBoundingClientRect(); d.ox = d.x - r.left; d.oy = d.y - r.top;
-  const cl = d.el.cloneNode(true); cl.classList.remove('sel'); cl.classList.add('dc'); cl.style.left = r.left + 'px'; cl.style.top = r.top + 'px';
+  const cl = d.el.cloneNode(true); cl.classList.remove('sel'); cl.classList.add('dc'); cl.style.transform = `translate3d(${r.left}px,${r.top}px,0) scale(1.12) rotate(-4deg)`;
   document.body.appendChild(cl); d.cl = cl; d.el.classList.add('ph');
   try { h.setPointerCapture(d.pid); } catch (_) {}
   try { navigator.vibrate && navigator.vibrate(12); } catch (_) {}
@@ -1314,7 +1337,11 @@ function onHandMove(e) {
     if (Math.hypot(d.x - d.x0, d.y - d.y0) > (e.pointerType === 'mouse' ? 5 : 9)) { if (e.pointerType === 'mouse') dragStart(); else { clearTimeout(d.timer); drag = null; } }
     if (!d.on) return;
   }
-  d.cl.style.left = (d.x - d.ox) + 'px'; d.cl.style.top = (d.y - d.oy) + 'px';
+  if (!d.raf) d.raf = requestAnimationFrame(() => dragFrame(d, h)); // proses 1x per frame, bukan tiap event sentuh
+}
+function dragFrame(d, h) {
+  d.raf = 0; if (drag !== d || !d.on || !d.cl) return;
+  d.cl.style.transform = `translate3d(${d.x - d.ox}px,${d.y - d.oy}px,0) scale(1.12) rotate(-4deg)`; // transform = jalur GPU, nggak bikin layout ulang
   const pr = d.el.getBoundingClientRect();
   if (d.x >= pr.left && d.x <= pr.right && d.y >= pr.top && d.y <= pr.bottom) return; // masih di atas slot sendiri
   const hr = h.getBoundingClientRect(); if (d.x < hr.left - 40 || d.x > hr.right + 40 || d.y < hr.top - 50 || d.y > hr.bottom + 50) return;
@@ -1325,7 +1352,7 @@ function onHandMove(e) {
   h.insertBefore(d.el, d.x < br.left + br.width / 2 ? best : best.nextSibling);
 }
 function endDrag() {
-  const d = drag; if (!d) return; drag = null; clearTimeout(d.timer);
+  const d = drag; if (!d) return; drag = null; clearTimeout(d.timer); if (d.raf) cancelAnimationFrame(d.raf);
   if (d.on) {
     const h = document.getElementById('hand');
     if (d.cl) d.cl.remove(); d.el.classList.remove('ph');
@@ -1335,7 +1362,7 @@ function endDrag() {
   }
   if (pendingDraw) { pendingDraw = false; draw(); }
 }
-function abortDrag() { if (drag) { clearTimeout(drag.timer); if (drag.cl) drag.cl.remove(); drag = null; } pendingDraw = false; }
+function abortDrag() { if (drag) { clearTimeout(drag.timer); if (drag.raf) cancelAnimationFrame(drag.raf); if (drag.cl) drag.cl.remove(); drag = null; } pendingDraw = false; }
 document.addEventListener('keydown', e => { // pintasan PC: Enter = Keluarkan, P = Lewat, Esc = Batal pilih
   const t = e.target || {}; if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
   const b = id => { const x = document.getElementById(id); return x && !x.disabled ? x : null; };
@@ -1343,7 +1370,7 @@ document.addEventListener('keydown', e => { // pintasan PC: Enter = Keluarkan, P
   if (e.key === 'Enter' && t.tagName !== 'BUTTON') x = b('pl'); else if (e.key === 'Escape') x = b('cl'); else if (e.key === 'p' || e.key === 'P') x = b('ps');
   if (x) { e.preventDefault(); x.click(); }
 });
-document.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); // nyeret kartu: jangan ikut scroll halaman
+// touchmove non-passive dipasang cuma di #hand (lihat drawGame), biar scroll di area lain nggak nunggu JSl halaman
 
 // ---------- notif mengambang: "Rapikan kartu dulu" 30 detik di awal game ----------
 // Muncul sekali tiap game baru (belum ada kartu keluar). Hilang sendiri setelah 30 detik, atau begitu pemain udah ngerapiin (geser kartu / Kelompokkan) atau tap ✕.
@@ -1366,6 +1393,10 @@ function arnCheck(g, h) { // game baru = tangan baru dan belum ada kartu keluar
   const k = code + ':' + h.join(',');
   if (k === arnKey) return;
   arnKey = k; arnShow();
+}
+function selUI(mt) { // update ringan setelah pilih/batal pilih kartu
+  const p = document.getElementById('pl'), c = document.getElementById('cl'), e = document.querySelector('p.msg.err');
+  if (p) p.disabled = !(mt && sel.size); if (c) c.disabled = !sel.size; if (e) e.textContent = '';
 }
 function drawGame() {
   const g = room.game; if (!g) return;
@@ -1405,17 +1436,19 @@ function drawGame() {
   if (fly != null) { const f = fly; fly = null; flyIn(f); }
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.oncontextmenu = e => e.preventDefault();
+  hand.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); // nyeret kartu: jangan ikut scrol
   hand.onpointerdown = onHandDown; hand.onpointermove = onHandMove; hand.onpointerup = hand.onpointercancel = endDrag;
   hand.onclick = e => {
     if (Date.now() - dragEnd < 350) return; // klik susulan habis nyeret kartu: abaikan
     const el = e.target.closest('.c'); if (!el) return;
-    const id = +el.dataset.id, up = !sel.has(id); Snd.tick(up); up ? sel.add(id) : sel.delete(id); err = ''; drawGame();
+    const id = +el.dataset.id, up = !sel.has(id); Snd.tick(up); up ? sel.add(id) : sel.delete(id); err = '';
+    el.classList.toggle('sel', up); selUI(myTurn);
   };
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
   if (g.over) { if (hostNow()) again.onclick = start; return; }
   if (g.first && myTurn) a3.onclick = () => { sel.clear(); mine.filter(c => rk(c) === 0).forEach(c => sel.add(c)); drawGame(); };
   if (mine.length > 1) kp.onclick = () => { order = groupHand(order); saveOrder(); arnHide(); drawGame(); };
-  pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
+  pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); document.querySelectorAll('#hand .c.sel').forEach(c => c.classList.remove('sel')); selUI(myTurn); };
 }
 function leaveGame() {
   // keluar di tengah game: game tetap lanjut, kursi lo langsung dipegang bot (AFK). Room cuma dibubarkan kalau nggak ada manusia lain.
