@@ -1,4 +1,4 @@
-/* Kartu 13 - logika game (online + lawan bot). Dimuat oleh index.html. Naikin VER di bawah tiap rilis: auto-update ngecek file ini dan style.css. */
+/* Kartu 13 - SUMBER logika game (online + lawan bot). Edit di sini, lalu build ulang game.min.js (lihat build.sh). Yang dimuat browser itu game.min.js. Naikin VER di bawah tiap rilis. */
 /* ====== CONFIG FIREBASE ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyDuIFh5L1U6QfmGXf6gwyqhLNqs_flk6-A",
@@ -14,7 +14,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.8'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.9'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1372,7 +1372,7 @@ function wlRelease() { try { if (wlock) wlock.release(); } catch (_) {} wlock = 
 document.addEventListener('visibilitychange', () => { if (!document.hidden && code) wlAcquire(); }); // browser ngelepas otomatis pas tab disembunyiin, ambil lagi pas balik
 addEventListener('pointerup', () => { if (code && !wlock) wlAcquire(); }, { passive: true }); // sebagian browser cuma kasih izin setelah disentuh
 
-// auto-update: kalau game.js / style.css di server beda dengan yang lagi jalan, halaman dimuat ulang otomatis (room tetap nyambung).
+// auto-update: kalau game.min.js / style.css di server beda dengan yang lagi jalan, halaman dimuat ulang otomatis (room tetap nyambung).
 // Ngeceknya pakai cache:'no-cache' (conditional request, server balas 304 kalau nggak berubah), jadi hemat kuota.
 (function autoUpdate() {
   const norm = t => t.replace(/\r\n/g, '\n').trim();
@@ -1381,14 +1381,14 @@ addEventListener('pointerup', () => { if (code && !wlock) wlAcquire(); }, { pass
   let base = null; // hash game.js + style.css pas pertama dicek; kalau berubah sesudahnya = ada update
   async function check() {
     try {
-      const [js, css] = await Promise.all([get('game.js'), get('style.css')]);
-      const m = js.match(/const VER = '([^']*)'/), h = hash(js + '\u0000' + css);
+      const [js, css] = await Promise.all([get('game.min.js'), get('style.css')]);
+      const m = js.match(/(?:^|[^\w$.])VER\s*=\s*(['"])([^'"]*)\1/), h = hash(js + '\u0000' + css);
       if (base === null) base = h;
-      if ((!m || m[1] === VER) && h === base) return;
+      if ((!m || m[2] === VER) && h === base) return;
       if (sessionStorage.getItem('k13upd') === h) return; // sudah pernah coba muat ulang ke versi ini, cegah loop
       sessionStorage.setItem('k13upd', h);
       $.insertAdjacentHTML('afterbegin', '<p class="msg">Ada update, memuat versi terbaru...</p>');
-      try { await Promise.all([fetch('game.js', { cache: 'reload' }), fetch('style.css', { cache: 'reload' })]); } catch (_) {} // buang cache browser dulu biar muat ulang pasti dapat file baru
+      try { await Promise.all([fetch('game.min.js', { cache: 'reload' }), fetch('style.css', { cache: 'reload' })]); } catch (_) {} // buang cache browser dulu biar muat ulang pasti dapat file baru
       setTimeout(() => location.replace(location.pathname + '?u=' + Date.now()), 400);
     } catch (e) { /* offline: abaikan */ }
   }
