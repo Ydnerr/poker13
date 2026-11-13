@@ -14,7 +14,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.9'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.10'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -724,7 +724,7 @@ function vLink() { // status sambungan ke tiap pemain, buat nyari tahu kenapa su
 }
 function vUI() {
   const f = $id('vfab'), r = $id('vrow'), ps = (room && room.players) || {};
-  const avail = voiceOK && !!code && Object.keys(ps).length >= 2 && !Object.values(ps).some(p => p && p.bot); // cuma room sesama manusia
+  const avail = voiceOK && !!code && Object.values(ps).filter(p => p && !p.bot).length >= 2; // minimal 2 pemain asli (sisanya boleh bot)
   f.hidden = !(avail || vJoined);
   f.textContent = !vJoined ? '🎤' : vMuted ? (vPtt ? '✋' : '🔇') : '🎙️';
   f.className = 'fab vfab' + (vJoined ? (vPtt ? ' ptt' + (vMuted ? '' : ' on') : (vMuted ? ' mute' : ' on')) : '');
@@ -1296,7 +1296,7 @@ function drawGame() {
   arnCheck(g, hands[me]);
   const myTurn = cur === me && !g.over && !pend && !fin.includes(me);
   const mi = g.order.indexOf(me), after = g.order.map((_, k) => g.order[(mi + 1 + k) % g.order.length]).slice(0, g.order.length - 1).reverse(); // pemain berikutnya ada di paling kanan
-  const opps = after.map(p => `<div data-p="${p}" class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
+  const opps = after.map(p => `<div data-p="${p}" class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : (passed[p] ? 'lewat' : '')}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
   const BL = l => l.t === 'r' ? 'seri ' + l.n + ' satu logo' : ({ q: '4 kembar', g: '4 kembar + pasangan', x: 'seri 5 satu logo + pasangan', d: '8 kartu kembar (2 x 4 kembar)' }[l.t] || 'bom');
   let center;
   if (g.self2) center = `<div class="win">${g.self2 === me ? 'Lo' : esc(P[g.self2]?.n || '?')} ngebom diri sendiri, kalah</div><div>Kartu terakhirnya ada angka 2. Game diulang dari fase kumpulin 3.</div><div class="cards">${cardsOf(last.c)}</div>`;
