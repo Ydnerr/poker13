@@ -14,7 +14,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.10'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.11'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1092,7 +1092,7 @@ function closeTut() { const t = document.getElementById('tut'); if (t) t.classLi
 const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom 4 kembar', d: '8 kartu kembar (2 x 4)', g: '4 kembar + pasangan', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
-  if (drag) { if (drag.on) { pendingDraw = true; return; } endDrag(); } // lagi nyeret kartu: tunda gambar ulang sampai dilepas
+  if (drag) { if (drag.on && Date.now() - drag.t0 < 15000) { pendingDraw = true; return; } pendingDraw = false; endDrag(); } dragCleanup(); // drag yang nyangkut >15 dtk dianggap selesai // lagi nyeret kartu: tunda gambar ulang sampai dilepas
   $.className = room && room.status !== 'lobby' ? 'game' : ''; // layout desktop: mode game dibikin satu layar
   if (!room) return drawHome();
   if (room.status === 'lobby') return drawLobby();
@@ -1149,7 +1149,7 @@ function shuffled(a) { const r = a.slice(); for (let i = r.length - 1; i > 0; i-
 function saveOrder() { try { localStorage.setItem('k13ord', JSON.stringify({ c: code, o: order })); } catch (_) {} }
 function syncOrder(hs) { // urutan pemain dipertahankan; kartu dibagi baru = acak seperti dibagiin dealer
   if (!order.length) { try { const s = JSON.parse(localStorage.getItem('k13ord') || 'null'); if (s && s.c === code && Array.isArray(s.o)) order = s.o; } catch (_) {} }
-  const set = new Set(hs); let k = order.filter(c => set.has(c));
+  const set = new Set(hs); let k = [...new Set(order)].filter(c => set.has(c)); // id dobel di urutan dibuang (kalau ada kartu yang kurang, otomatis diacak ulang)
   if (k.length < hs.length) k = shuffled(hs);
   order = k; saveOrder(); return order;
 }
@@ -1197,7 +1197,7 @@ function onHandDown(e) {
 }
 function dragStart() {
   const d = drag, h = document.getElementById('hand'); if (!d || !h) return;
-  d.on = true; const r = d.el.getBoundingClientRect(); d.ox = d.x - r.left; d.oy = d.y - r.top;
+  d.on = true; d.t0 = Date.now(); const r = d.el.getBoundingClientRect(); d.ox = d.x - r.left; d.oy = d.y - r.top;
   const cl = d.el.cloneNode(true); cl.classList.remove('sel'); cl.classList.add('dc'); cl.style.transform = `translate3d(${r.left}px,${r.top}px,0) scale(1.12) rotate(-4deg)`;
   document.body.appendChild(cl); d.cl = cl; d.el.classList.add('ph');
   try { h.setPointerCapture(d.pid); } catch (_) {}
@@ -1236,6 +1236,21 @@ function endDrag() {
   if (pendingDraw) { pendingDraw = false; draw(); }
 }
 function abortDrag() { if (drag) { clearTimeout(drag.timer); if (drag.raf) cancelAnimationFrame(drag.raf); if (drag.cl) drag.cl.remove(); drag = null; } pendingDraw = false; }
+function dragCleanup() { // buang sisa drag yang nyangkut: salinan kartu yang melayang dan kartu yang masih pudar
+  document.querySelectorAll('.c.dc').forEach(x => x.remove());
+  document.querySelectorAll('.hand .c.ph').forEach(x => x.classList.remove('ph'));
+}
+function retryImg(i) { // gambar kartu gagal dimuat (sinyal putus sebentar): coba lagi, soalnya kartu di tangan dipakai ulang dan nggak dimuat ulang sendiri
+  const n = +i.dataset.rt || 0; if (n >= 4) return;
+  i.dataset.rt = n + 1;
+  setTimeout(() => { const u = (i.getAttribute('src') || '').split('?')[0]; if (u && i.isConnected) i.src = u + '?r=' + (n + 1); }, 500 * (n + 1));
+}
+const healImgs = () => document.querySelectorAll('.c img').forEach(i => { if (i.complete && !i.naturalWidth) { i.dataset.rt = 0; retryImg(i); } });
+addEventListener('error', e => { const t = e.target; if (t && t.tagName === 'IMG' && t.closest && t.closest('.c')) retryImg(t); }, true);
+['pointerup', 'pointercancel'].forEach(t => addEventListener(t, () => { if (drag && drag.on) endDrag(); }, true)); // jari lepas di mana pun = drag selesai (walau pointer lepas dari #hand)
+addEventListener('blur', () => { if (drag) endDrag(); });
+document.addEventListener('visibilitychange', () => { if (drag) endDrag(); if (!document.hidden) { dragCleanup(); healImgs(); if (room && code) draw(); } }); // balik dari app lain: bersihin sisa drag, muat ulang gambar yang gagal, gambar ulang
+addEventListener('pageshow', () => { dragCleanup(); healImgs(); });
 document.addEventListener('keydown', e => { // pintasan PC: Enter = Keluarkan, P = Lewat, Esc = Batal pilih
   const t = e.target || {}; if (e.ctrlKey || e.metaKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || '')) return;
   const b = id => { const x = document.getElementById(id); return x && !x.disabled ? x : null; };
@@ -1278,7 +1293,7 @@ function syncHandDOM(h, ids) { // samain kartu di tangan dengan urutan terbaru: 
   ids.forEach(id => {
     let el = old.get(id);
     if (el) old.delete(id); else { const t = document.createElement('template'); t.innerHTML = card(id, ''); el = t.content.firstChild; }
-    el.classList.toggle('sel', sel.has(id));
+    el.classList.toggle('sel', sel.has(id)); el.classList.toggle('ph', !!(drag && drag.on && drag.el === el)); // sisa kartu pudar dari drag yang putus ikut dibersihin
     const want = prev ? prev.nextSibling : h.firstChild;
     if (el !== want) h.insertBefore(el, want);
     prev = el;
