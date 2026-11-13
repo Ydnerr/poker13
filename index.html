@@ -179,7 +179,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.4'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.5'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1029,21 +1029,24 @@ const Snd = (() => {
     o.connect(fl); o2.connect(g2); g2.connect(fl); fl.connect(g); g.connect(mBus);
     o.start(t); o2.start(t); o.stop(t + dur + .05); o2.stop(t + dur + .05);
   }
-  function pad(fs, t, dur) { // akor panjang yang lembut
+  function pad(fs, t, dur) { // akor panjang yang lembut: 1 filter + 1 gain buat semua nada (dulu per nada)
+    const g = ac.createGain(), fl = ac.createBiquadFilter();
+    fl.type = 'lowpass'; fl.frequency.value = 750;
+    const v = .045 * fs.length;
+    g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(v, t + 2); g.gain.setValueAtTime(v, t + dur - 2.2); g.gain.linearRampToValueAtTime(.0001, t + dur);
+    fl.connect(g); g.connect(mBus);
     fs.forEach(f => {
-      const o = ac.createOscillator(), g = ac.createGain(), fl = ac.createBiquadFilter();
+      const o = ac.createOscillator();
       o.type = 'triangle'; o.frequency.value = f; o.detune.value = (Math.random() - .5) * 12;
-      fl.type = 'lowpass'; fl.frequency.value = 750;
-      g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(.045, t + 2); g.gain.setValueAtTime(.045, t + dur - 2.2); g.gain.linearRampToValueAtTime(.0001, t + dur);
-      o.connect(fl); fl.connect(g); g.connect(mBus); o.start(t); o.stop(t + dur + .05);
+      o.connect(fl); o.start(t); o.stop(t + dur + .05);
     });
   }
   function sched() {
     const now = ac.currentTime;
     if (mt < now) mt = now + .1;
     if (pt < now) pt = now + .1;
-    while (pt < now + 3) { pad(CH[PROG[ci++ % PROG.length]], pt, 7); pt += 6; }
-    while (mt < now + 3) {
+    while (pt < now + 4) { pad(CH[PROG[ci++ % PROG.length]], pt, 7); pt += 6; }
+    while (mt < now + 4) {
       deg = Math.max(-2, Math.min(9, deg + [-2, -1, -1, 0, 1, 1, 2][Math.random() * 7 | 0]));
       if (Math.random() < .25) { mt += .7 + Math.random() * .6; continue; }
       const dur = [1.2, 1.8, 2.4][Math.random() * 3 | 0];
@@ -1057,13 +1060,15 @@ const Snd = (() => {
   function init() {
     if (ac) { if (ac.state !== 'running') ac.resume(); return; } // iOS: state bisa 'interrupted' (habis telepon / pindah app), resume tiap sentuhan
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    ac = new AC();
-    const master = ac.createGain(); master.connect(ac.destination);
+    try { ac = new AC({ latencyHint: 'balanced' }); } catch (_) { ac = new AC(); } // buffer sedikit lebih besar: nggak gampang kresek / putus kalau HP lagi sibuk gambar animasi
+    const master = ac.createGain(), lim = ac.createDynamicsCompressor(); // limiter: musik + efek yang numpuk nggak sampai clipping (itu yang bunyi kresek)
+    lim.threshold.value = -10; lim.knee.value = 8; lim.ratio.value = 6; lim.attack.value = .003; lim.release.value = .2;
+    master.connect(lim); lim.connect(ac.destination);
     musicGain = ac.createGain(); musicGain.gain.value = on.music ? .55 : 0; musicGain.connect(master);
     sfxGain = ac.createGain(); sfxGain.gain.value = on.sfx ? 1 : 0; sfxGain.connect(master);
     mBus = ac.createGain(); mBus.connect(musicGain);
-    const rv = ac.createConvolver(), wet = ac.createGain(), len = ac.sampleRate * 2.8, ib = ac.createBuffer(2, len, ac.sampleRate);
-    for (let c = 0; c < 2; c++) { const d = ib.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    const rv = ac.createConvolver(), wet = ac.createGain(), len = ac.sampleRate * 1.6 | 0, ib = ac.createBuffer(1, len, ac.sampleRate); // reverb mono 1.6 dtk: convolver jauh lebih ringan (dulu stereo 2.8 dtk)
+    for (let c = 0; c < 1; c++) { const d = ib.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
     rv.buffer = ib; wet.gain.value = .6; mBus.connect(rv); rv.connect(wet); wet.connect(musicGain);
     [[73.42, .06], [110, .035]].forEach(([f, v]) => { // dengung rendah (drone)
       const o = ac.createOscillator(), g = ac.createGain(), l = ac.createOscillator(), lg = ac.createGain();
