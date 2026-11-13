@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#12382b">
 <meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <title>Kartu 13</title>
 <style>
@@ -11,8 +12,10 @@
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,var(--felt),var(--felt2));color:var(--ink);font:16px/1.4 Georgia,'Times New Roman',serif}
 :root{--bg-p:url('cover/bg-portrait.svg');--bg-l:url('cover/bg-landscape.svg');--dim:linear-gradient(rgba(0,0,0,.4),rgba(0,0,0,.4))} /* --dim = redup background: .4 = 40% gelap, naikin biar makin redup */
 /* Background: gambar 6:19 buat portrait, 19:6 buat landscape. Gambar ada di folder cover/ (root repo). Mau ganti? Timpa file di folder itu, atau ubah --bg-p dan --bg-l */
-html{-webkit-tap-highlight-color:transparent}button,a,select,input,.c,.fab{touch-action:manipulation}body{overscroll-behavior-y:contain}
-body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--dim),var(--bg-p) center/cover no-repeat}
+html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-size-adjust:100%} /* iOS: jangan perbesar teks otomatis pas landscape */
+@supports (height:100dvh){body{min-height:100dvh}} /* iOS Safari: 100vh lebih tinggi dari layar kelihatan (bar URL), dvh pas */
+.c,.fab,.hand{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} /* iOS: tahan kartu nggak memunculkan seleksi / menu */button,a,select,input,.c,.fab{touch-action:manipulation}body{overscroll-behavior-y:contain}
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;transform:translateZ(0);background:var(--dim),var(--bg-p) center/cover no-repeat}
 @media (orientation:landscape){body::before{background-image:var(--dim),var(--bg-l)}}
 main{max-width:720px;margin:0 auto;padding:16px}
 h1{font-size:2rem;margin:.2em 0}
@@ -121,7 +124,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
 }
 #tut{position:fixed;inset:0;z-index:50;background:#000d;display:none;align-items:center;justify-content:center;padding:12px}
 #tut.on{display:flex}
-#tut .tw{background:var(--felt2);border:1px solid var(--gold);border-radius:14px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;padding:14px 16px}
+#tut .tw{background:var(--felt2);border:1px solid var(--gold);border-radius:14px;width:100%;max-width:560px;max-height:92vh;max-height:92dvh;display:flex;flex-direction:column;padding:14px 16px}
 #tut h3{margin:0 0 6px;color:var(--gold)}#tut .tbody{overflow:auto;flex:1;min-height:0}
 #tut p{margin:6px 0;line-height:1.45}
 #tut .tx{margin:8px 0;padding:6px 8px;border-radius:10px;background:#0000002e}#tut .tl{font-size:.85rem;margin-bottom:4px}
@@ -176,7 +179,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.2'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.4'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -1052,7 +1055,7 @@ const Snd = (() => {
   function startMusic() { if (!timer && ac && on.music) { sched(); timer = setInterval(sched, 800); } }
   function stopMusic() { clearInterval(timer); timer = null; }
   function init() {
-    if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+    if (ac) { if (ac.state !== 'running') ac.resume(); return; } // iOS: state bisa 'interrupted' (habis telepon / pindah app), resume tiap sentuhan
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     ac = new AC();
     const master = ac.createGain(); master.connect(ac.destination);
@@ -1102,7 +1105,7 @@ const Snd = (() => {
     boom() { if (!ok()) return; const t = ac.currentTime; tone(t, 95, 28, .9, .6); noise(t, .7, 'lowpass', 900, 120, .5); [293.66, 349.23, 440].forEach((f, i) => tone(t + .15 + i * .12, f, f, .7, .12)); }
   };
 })();
-['pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, () => Snd.init(), { passive: true }));
+['pointerdown', 'pointerup', 'keydown', 'touchstart', 'touchend', 'click'].forEach(e => addEventListener(e, () => Snd.init(), { passive: true })); // iOS baru buka kunci audio lewat touchend / click, bukan touchstart
 document.addEventListener('visibilitychange', () => Snd.hidden(document.hidden));
 const bigOn = () => localStorage.getItem('k13big') === '1';
 function barLabels() {
@@ -1120,7 +1123,7 @@ barLabels();
 // gambar kartu: cards/<id>.svg (Vecteezy.com), id = angka*4 + logo
 const cardsOf = (cs, extra = '') => { const e = cs.length > 4 && ev(cs), pr = e && ['f', 'x', 'g'].includes(e.t); return cs.map((c, i) => (pr && i === cs.length - 2 ? '<span style="display:inline-block;width:22px"></span>' : '') + card(c, extra)).join(''); };
 const card = (id, extra = '') => `<div class="c ${extra}" data-id="${id}" role="img" aria-label="${R[rk(id)]}${S[su(id)]}"><img src="cards/${id}.svg" alt="" draggable="false" decoding="async"></div>`;
-new Image().src = 'cards/back.svg'; // preload punggung kartu (dipakai animasi kartu keluar)
+const _bk = new Image(); _bk.decoding = 'async'; _bk.src = 'cards/back.svg'; if (_bk.decode) _bk.decode().catch(() => {}); // preload + decode punggung kartu (dipakai animasi kartu keluar)
 // preload + decode 52 kartu sekali (cicil 4 per jeda) biar gambar nggak di-render ulang tiap gambar ulang meja
 const _pre = []; let preDone = false;
 function preloadCards() {
@@ -1305,15 +1308,16 @@ function flyIn(p) { // kartu meluncur dari pemain ke meja sebagai punggung kartu
     const box = document.querySelector('.table .cards'); if (!box) return;
     const src = p === me ? document.getElementById('hand') : document.querySelector('.opp[data-p="' + p + '"]'); if (!src) return;
     const cs = [...box.querySelectorAll('.c')];
-    cs.forEach(c => { const k = document.createElement('img'); k.className = 'bk'; k.src = 'cards/back.svg'; k.alt = ''; k.draggable = false; c.appendChild(k); }); // tutup dulu
+    cs.forEach(c => { c.style.willChange = 'transform'; const k = document.createElement('img'); k.className = 'bk'; k.src = 'cards/back.svg'; k.alt = ''; k.draggable = false; k.decoding = 'sync'; c.appendChild(k); }); // tutup dulu; will-change: tiap kartu dapat layer sendiri dari awal, jadi flip cuma nempelin layer (nggak gambar ulang)
     const reveal = () => cs.forEach((c, i) => { // dibalik satu-satu: sisi punggung menyempit, lalu muka kartu melebar
       const k = c.querySelector('.bk'); if (!k) return;
       const half = (f, t, o) => c.animate([{ transform: 'perspective(500px) rotateY(' + f + 'deg)' }, { transform: 'perspective(500px) rotateY(' + t + 'deg)' }], o);
       half(0, 90, { duration: 120, delay: i * 50, fill: 'backwards' }).onfinish = () => { k.remove(); half(-90, 0, { duration: 120 }); };
     });
-    setTimeout(() => cs.forEach(c => { const k = c.querySelector('.bk'); if (k) k.remove(); }), 1400); // jaga-jaga: punggung nggak boleh nyangkut
+    setTimeout(() => cs.forEach(c => { const k = c.querySelector('.bk'); if (k) k.remove(); c.style.willChange = ''; }), 1400); // jaga-jaga: punggung nggak boleh nyangkut
     const a = src.getBoundingClientRect(), b = box.getBoundingClientRect();
     const dx = (a.left + a.width / 2) - (b.left + b.width / 2), dy = (a.top + a.height / 2) - (b.top + b.height / 2);
+    box.style.willChange = 'transform, opacity';
     box.animate([{ transform: `translate(${dx}px,${dy}px) scale(.55)`, opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 340, easing: 'cubic-bezier(.2,.8,.3,1)' }).onfinish = reveal;
   } catch (_) {}
 }
