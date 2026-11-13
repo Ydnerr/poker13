@@ -17,6 +17,7 @@ html{-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%;text-
 .c,.fab,.hand{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none} /* iOS: tahan kartu nggak memunculkan seleksi / menu */button,a,select,input,.c,.fab{touch-action:manipulation}body{overscroll-behavior-y:contain}
 body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;transform:translateZ(0);background:var(--dim),var(--bg-p) center/cover no-repeat}
 @media (orientation:landscape){body::before{background-image:var(--dim),var(--bg-l)}}
+body.bgc::before{background:var(--dim)} #bgc{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2;pointer-events:none} /* kalau background berhasil digambar ke canvas, SVG-nya nggak dipakai lagi */
 main{max-width:720px;margin:0 auto;padding:16px}
 h1{font-size:2rem;margin:.2em 0}
 h2{font-size:1.1rem;font-weight:normal;color:var(--mute);margin:0 0 12px}
@@ -179,7 +180,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44.5'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VER = 'v44.6'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
 const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
@@ -498,7 +499,7 @@ function enter(c) {
   lastLog = -1; code = c; err = ''; sel.clear(); sig = ''; order = [];
   localStorage.setItem('k13room', c);
   ref = db.ref('rooms/' + c);
-  preloadCards();
+  preloadCards(); wlAcquire();
   chatOn(c);
   reactOn(c);
   presOn();
@@ -530,7 +531,7 @@ function leave(silent) {
   clearTimeout(botT); botT = null; arnHide(); arnKey = '';
   presOff(); sig = '';
   if (ref) { ref.off(); [...ROOM_KEYS, 'presence'].forEach(k => ref.child(k).off()); }
-  chatOff(); reactOff(); voiceOff();
+  chatOff(); reactOff(); voiceOff(); wlRelease();
   if (!silent && room && room.status === 'lobby') {
     if (room.host === me) ref.remove(); else { ref.child('players/' + me).remove(); ref.child('presence/' + me).remove(); }
   }
@@ -1124,6 +1125,34 @@ document.body.classList.toggle('big', bigOn());
 document.getElementById('tb').onclick = () => { localStorage.setItem('k13big', bigOn() ? '0' : '1'); document.body.classList.toggle('big', bigOn()); barLabels(); };
 barLabels();
 
+// ---------- background: gambar SVG vektor dirender SEKALI ke canvas, bukan digambar ulang browser terus-terusan ----------
+// Gagal / nggak didukung = otomatis pakai background CSS biasa. Matiin lewat ?bgc=0 di URL kalau tampilannya beda.
+(function bgCanvas() {
+  if (new URLSearchParams(location.search).get('bgc') === '0') return;
+  const cs = getComputedStyle(document.documentElement), urlOf = n => { const m = /url\(["']?([^"')]+)["']?\)/.exec(cs.getPropertyValue(n)); return m && m[1]; };
+  const srcs = { p: urlOf('--bg-p'), l: urlOf('--bg-l') }, imgs = {};
+  if (!srcs.p && !srcs.l) return;
+  let cv = null, rt = null, key = '';
+  const load = k => imgs[k] || (imgs[k] = new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = srcs[k]; }));
+  async function paint() {
+    try {
+      const k = matchMedia('(orientation:landscape)').matches ? 'l' : 'p'; if (!srcs[k]) return;
+      const im = await load(k), iw = im.naturalWidth, ih = im.naturalHeight; if (!(iw > 0 && ih > 0)) throw 0; // SVG tanpa ukuran bawaan: biarin CSS
+      const dpr = Math.min(devicePixelRatio || 1, 2); let w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+      const cap = 2560 / Math.max(w, h); if (cap < 1) { w = Math.round(w * cap); h = Math.round(h * cap); }
+      const kk = k + w + 'x' + h; if (kk === key) return; key = kk;
+      if (!cv) { cv = document.createElement('canvas'); cv.id = 'bgc'; cv.setAttribute('aria-hidden', 'true'); document.body.prepend(cv); }
+      cv.width = w; cv.height = h;
+      const sc = Math.max(w / iw, h / ih), dw = iw * sc, dh = ih * sc, ctx = cv.getContext('2d'); // sama kayak background-size: cover
+      ctx.drawImage(im, (w - dw) / 2, (h - dh) / 2, dw, dh);
+      document.body.classList.add('bgc');
+    } catch (_) { if (cv) { cv.remove(); cv = null; } document.body.classList.remove('bgc'); key = ''; }
+  }
+  const later = () => { clearTimeout(rt); rt = setTimeout(paint, 250); };
+  addEventListener('resize', later); addEventListener('orientationchange', later);
+  paint();
+})();
+
 // ---------- tampilan ----------
 // gambar kartu: cards/<id>.svg (Vecteezy.com), id = angka*4 + logo
 const cardsOf = (cs, extra = '') => { const e = cs.length > 4 && ev(cs), pr = e && ['f', 'x', 'g'].includes(e.t); return cs.map((c, i) => (pr && i === cs.length - 2 ? '<span style="display:inline-block;width:22px"></span>' : '') + card(c, extra)).join(''); };
@@ -1408,6 +1437,20 @@ function selUI(mt) { // update ringan setelah pilih/batal pilih kartu
   const p = document.getElementById('pl'), c = document.getElementById('cl'), e = document.querySelector('p.msg.err');
   if (p) p.disabled = !(mt && sel.size); if (c) c.disabled = !sel.size; if (e) e.textContent = '';
 }
+let gsTable = null; // isi HTML meja yang lagi tampil
+function syncHandDOM(h, ids) { // samain kartu di tangan dengan urutan terbaru: kartu yang masih ada dipakai lagi (gambar SVG nggak dibuat ulang), cuma yang baru / hilang yang diubah
+  const old = new Map([...h.children].map(el => [+el.dataset.id, el]));
+  let prev = null;
+  ids.forEach(id => {
+    let el = old.get(id);
+    if (el) old.delete(id); else { const t = document.createElement('template'); t.innerHTML = card(id, ''); el = t.content.firstChild; }
+    el.classList.toggle('sel', sel.has(id));
+    const want = prev ? prev.nextSibling : h.firstChild;
+    if (el !== want) h.insertBefore(el, want);
+    prev = el;
+  });
+  old.forEach(el => el.remove());
+}
 function drawGame() {
   const g = room.game; if (!g) return;
   const ln = (g.log || []).length; // efek suara saat ada kartu keluar (dari siapa pun)
@@ -1432,21 +1475,32 @@ function drawGame() {
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
   const status = g.over ? (g.bomb || g.quad2 || g.self2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
   const oldVer = g.v !== VMAJ ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
-  $.innerHTML = `${oldVer}<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
-  <div class="opps" style="margin-top:8px">${opps}</div>
-  <div class="table">${center}</div>
-  <p class="msg">${status}</p><p class="msg err">${esc(err)}</p>
-  ${dec[me] ? `<div class="box"><b>Kartu murni!</b> Lo nggak dapat J, Q, K sama sekali. Berhenti sekarang = juara instan, atau lanjut main.<div class="row" style="margin-top:8px"><button id="bh">Berhenti, juara</button><button id="kt" class="ghost">Lanjut main</button></div></div>` : ''}
-  <div data-p="${me}" class="me ${myTurn ? 'turn' : ''}"><div class="cards hand" id="hand">${mine.map(c => card(c, sel.has(c) ? 'sel' : '')).join('')}</div>
-  <div class="row acts" style="margin-top:10px">
-  ${g.over ? (hostNow() ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
-    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${mine.length > 1 ? '<button id="kp" class="ghost">Kelompokkan</button>' : ''}${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`}
-  </div></div>
-`;
+  // Kerangka meja dibikin sekali. Tiap giliran cuma bagian yang berubah yang diisi ulang:
+  // tangan lo (kartu yang sama nggak dibuat ulang), meja cuma kalau kartu di meja ganti, sisanya teks kecil.
+  if (!document.getElementById('hand') || !document.getElementById('gs-tb')) {
+    gsTable = null;
+    $.innerHTML = `<div id="gs-old" style="display:contents"></div><div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
+  <div class="opps" id="gs-op" style="margin-top:8px"></div>
+  <div class="table" id="gs-tb"></div>
+  <p class="msg" id="gs-st"></p><p class="msg err" id="gs-er"></p>
+  <div id="gs-dec" style="display:contents"></div>
+  <div data-p="${me}" class="me" id="gs-me"><div class="cards hand" id="hand"></div>
+  <div class="row acts" id="gs-ac" style="margin-top:10px"></div></div>`;
+  }
+  const gid = x => document.getElementById(x);
+  gid('gs-old').innerHTML = oldVer;
+  gid('gs-op').innerHTML = opps;
+  if (center !== gsTable) { gid('gs-tb').innerHTML = center; gsTable = center; } // meja sama: jangan dibongkar (animasi kartu yang lagi jalan juga nggak terputus)
+  gid('gs-st').innerHTML = status; gid('gs-er').textContent = err;
+  gid('gs-dec').innerHTML = dec[me] ? `<div class="box"><b>Kartu murni!</b> Lo nggak dapat J, Q, K sama sekali. Berhenti sekarang = juara instan, atau lanjut main.<div class="row" style="margin-top:8px"><button id="bh">Berhenti, juara</button><button id="kt" class="ghost">Lanjut main</button></div></div>` : '';
+  gid('gs-me').className = 'me ' + (myTurn ? 'turn' : '');
+  syncHandDOM(gid('hand'), mine);
+  gid('gs-ac').innerHTML = g.over ? (hostNow() ? '<button id="again">Main lagi</button>' : '<span class="msg">Nunggu host mulai ulang</span>')
+    : `<button id="pl" ${myTurn && sel.size ? '' : 'disabled'}>Keluarkan</button><button id="ps" class="ghost" ${myTurn && last && !g.first ? '' : 'disabled'}>Lewat</button><button id="cl" class="ghost" ${sel.size ? '' : 'disabled'}>Batal pilih</button>${mine.length > 1 ? '<button id="kp" class="ghost">Kelompokkan</button>' : ''}${g.first && myTurn ? '<button id="a3" class="ghost">Pilih semua 3</button>' : ''}`;
   if (fly != null) { const f = fly; fly = null; flyIn(f); }
   lv.onclick = () => { if (confirm('Keluar dari game? Lo nggak bisa balik ke game ini.')) { leaveGame(); } };
   hand.oncontextmenu = e => e.preventDefault();
-  hand.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); // nyeret kartu: jangan ikut scrol
+  if (!hand._tm) { hand._tm = 1; hand.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); } // nyeret kartu: jangan ikut scrol (dipasang sekali, #hand sekarang dipakai terus)
   hand.onpointerdown = onHandDown; hand.onpointermove = onHandMove; hand.onpointerup = hand.onpointercancel = endDrag;
   hand.onclick = e => {
     if (Date.now() - dragEnd < 350) return; // klik susulan habis nyeret kartu: abaikan
@@ -1466,6 +1520,23 @@ function leaveGame() {
   else if (ref) ref.child('presence/' + me).update({ online: false, off: TS });
   leave(true);
 }
+
+// ---------- cache gambar kartu + background + Firebase SDK (service worker, file sw.js) ----------
+if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+
+// ---------- tahan layar nyala selama di room (Safari 16.4+, Chrome, Edge) ----------
+let wlock = null;
+async function wlAcquire() {
+  try {
+    if (!('wakeLock' in navigator) || wlock || document.hidden || !code) return;
+    const l = await navigator.wakeLock.request('screen'); wlock = l;
+    l.addEventListener('release', () => { if (wlock === l) wlock = null; });
+    if (!code) wlRelease();
+  } catch (_) { wlock = null; }
+}
+function wlRelease() { try { if (wlock) wlock.release(); } catch (_) {} wlock = null; }
+document.addEventListener('visibilitychange', () => { if (!document.hidden && code) wlAcquire(); }); // browser ngelepas otomatis pas tab disembunyiin, ambil lagi pas balik
+addEventListener('pointerup', () => { if (code && !wlock) wlAcquire(); }, { passive: true }); // sebagian browser cuma kasih izin setelah disentuh
 
 // auto-update: kalau index.html di server beda dengan yang lagi jalan, halaman dimuat ulang otomatis (room tetap nyambung)
 (function autoUpdate() {
