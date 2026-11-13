@@ -9,6 +9,10 @@
 :root{--felt:#12382b;--felt2:#0c2a20;--ink:#f3ecd8;--gold:#e0b44c;--red:#c8342b;--card:#fbf7ea;--mute:#8fb0a2;--cw:46px;--ch:68px;--cm:-4px;--cf:1rem;--cb:1.3rem;--cs:26px;--ci:.8rem}
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,var(--felt),var(--felt2));color:var(--ink);font:16px/1.4 Georgia,'Times New Roman',serif}
+:root{--bg-p:url('cover/bg-portrait.svg');--bg-l:url('cover/bg-landscape.svg')}
+/* Background: gambar 6:19 buat portrait, 19:6 buat landscape. Gambar ada di folder cover/ (root repo). Mau ganti? Timpa file di folder itu, atau ubah --bg-p dan --bg-l */
+body::before{content:'';position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--bg-p) center/cover no-repeat}
+@media (orientation:landscape){body::before{background-image:var(--bg-l)}}
 main{max-width:720px;margin:0 auto;padding:16px}
 h1{font-size:2rem;margin:.2em 0}
 h2{font-size:1.1rem;font-weight:normal;color:var(--mute);margin:0 0 12px}
