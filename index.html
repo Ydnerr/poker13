@@ -50,6 +50,8 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{padding:4px 10px;font-size:.82rem;font-weight:normal}
 .fab{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:20;width:46px;height:46px;padding:0;border-radius:50%;font-size:1.3rem;opacity:.92;box-shadow:0 2px 10px #0008}
 .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:.72rem;line-height:18px;font-weight:bold}
+.arn{position:fixed;left:12px;right:12px;top:calc(84px + env(safe-area-inset-top,0px));z-index:18;max-width:520px;margin:0 auto;background:#000e;border:1px solid var(--gold);border-radius:14px;padding:10px 12px 12px;font:.88rem/1.45 system-ui,sans-serif;box-shadow:0 4px 18px #0009;animation:arin .25s ease-out}.arn[hidden]{display:none}.arn b{color:var(--gold)}.arn .ar{display:flex;gap:8px;align-items:flex-start}.arn .ar>div{flex:1}.arn .ab{margin-top:8px;display:flex;gap:8px;align-items:center}.arn .ab button{padding:6px 12px;font-size:.85rem}.arn .bar30{height:3px;border-radius:2px;background:#ffffff22;margin-top:10px;overflow:hidden}.arn .bar30 i{display:block;height:100%;background:var(--gold);animation:arbar 30s linear forwards}
+@keyframes arin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}@keyframes arbar{from{width:100%}to{width:0}}
 .toast{position:fixed;left:12px;right:70px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:19;background:#000d;border:1px solid var(--gold);border-radius:12px;padding:8px 12px;font-size:.92rem;cursor:pointer;word-break:break-word}
 .badge[hidden],.toast[hidden]{display:none}
 .vfab{bottom:calc(70px + env(safe-area-inset-bottom,0px))}.vfab.on{box-shadow:0 0 0 3px #7be3a0,0 2px 10px #0008}.vfab.mute{background:var(--red);color:#fff}
@@ -145,6 +147,7 @@ body.big{--cw:56px;--ch:82px;--cm:-10px;--cf:1.15rem;--cb:1.6rem;--cs:34px;--ci:
 <footer class="pw">© 2026 <b>Poker 13</b><br>Built with GitHub Pages &amp; Firebase<br>AI-assisted by Claude<br>Card art: <a class="cr" href="https://www.vecteezy.com" target="_blank" rel="noopener">Vecteezy.com</a></footer>
 <button id="cfab" class="fab" hidden aria-label="Buka chat">💬<span id="cbadge" class="badge" hidden></span></button>
 <div id="ctoast" class="toast" hidden></div>
+<div id="arn" class="arn" role="status" hidden></div>
 <button id="vfab" class="fab vfab" hidden aria-label="Voice chat">🎤</button>
 <div id="vspk" class="vspk" hidden></div>
 <button id="rfab" class="fab rfab" hidden aria-label="Reaksi emoji">😎</button>
@@ -168,7 +171,7 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v41'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v42'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
@@ -500,7 +503,7 @@ function enter(c) {
   });
 }
 function leave(silent) {
-  clearTimeout(botT); botT = null;
+  clearTimeout(botT); botT = null; arnHide(); arnKey = '';
   presOff(); sig = '';
   if (ref) ref.off();
   chatOff(); reactOff(); voiceOff();
@@ -711,6 +714,8 @@ async function loadTurn() {
     if (Array.isArray(l) && l.length) VOICE_ICE = VOICE_STUN.concat(TURN_MANUAL, l);
   } catch (_) {}
 }
+const vSafari = /iP(hone|ad|od)/.test(navigator.userAgent) || /^((?!chrome|android|crios|fxios).)*safari/i.test(navigator.userAgent); // Safari: WebAudio + stream remote suka bikin suara hening
+let vMicBad = false;
 const voiceOK = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection);
 let vPtt = localStorage.getItem('k13ptt') === '1', vStream = null, vMuted = false, vPeers = {}, vMembers = {}, vJoined = false, vBusy = false, vCode = null, vCtx = null, vLocal = null, vTimer = null, vShown = '', vRefs = [];
 const vpath = x => 'rooms/' + vCode + '/' + x;
@@ -760,9 +765,11 @@ function vMkPeer(q, vt) { // pemain ber-id lebih kecil yang kirim offer (biar ng
   pc.onicecandidate = e => { if (e.candidate) vSend(q, 'ice', e.candidate.toJSON()); };
   pc.ontrack = e => {
     const st = e.streams[0]; if (!st) return;
-    if (!P.audio) { const a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline', ''); document.body.appendChild(a); P.audio = a; }
-    P.audio.srcObject = st; P.audio.play().catch(() => showToast('Voice', 'Suara ketahan browser. Tap layar sekali buat nyalain.'));
-    try { if (P.A) P.A.src.disconnect(); P.A = vAnalyser(st); } catch (_) {}
+    if (!P.audio) { const a = document.createElement('audio'); a.autoplay = true; a.setAttribute('playsinline', ''); a.muted = false; a.volume = 1; document.body.appendChild(a); P.audio = a; }
+    P.audio.srcObject = st;
+    const go = () => P.audio && P.audio.play().catch(() => showToast('Voice', 'Suara ketahan browser. Tap layar sekali buat nyalain.'));
+    go(); e.track.onunmute = () => { if (P.audio && P.audio.paused) go(); };
+    if (!vSafari) { try { if (P.A) P.A.src.disconnect(); P.A = vAnalyser(st); } catch (_) {} } // di Safari/iOS stream lawan nggak dimasukin WebAudio (indikator ngomong lawan dimatiin biar suara aman)
   };
   pc.onconnectionstatechange = () => {
     vUI();
@@ -801,11 +808,11 @@ function vSync(snap) { // daftar pemain yang lagi di voice berubah
 }
 function vTick() { // siapa yang lagi ngomong
   const names = [], nm = p => ((room && room.players && room.players[p]) || {}).n || '?';
-  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .04) names.push('Lo');
+  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .02) names.push('Lo');
   Object.keys(vPeers).forEach(q => { const P = vPeers[q]; if (P.A && vLevel(P.A) > .03) names.push(nm(q)); });
   const txt = names.length ? '🔊 ' + names.join(', ') : '';
   const ids = [];
-  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .04) ids.push(me);
+  if (vJoined && !vMuted && vLocal && vLevel(vLocal) > .02) ids.push(me);
   Object.keys(vPeers).forEach(q => { const P = vPeers[q]; if (P.A && vLevel(P.A) > .03) ids.push(q); });
   document.querySelectorAll('[data-p]').forEach(el => el.classList.toggle('talk', ids.includes(el.dataset.p))); // sorot kartu pemain yang lagi ngomong
   if (txt === vShown) return;
@@ -820,7 +827,13 @@ async function voiceJoin() {
   vBusy = false;
   if (!code) { vStream.getTracks().forEach(t => t.stop()); vStream = null; return; }
   vCode = code; vJoined = true; vMuted = vPtt; vMembers = {};
-  vStream.getAudioTracks().forEach(t => { t.enabled = !vMuted; });
+  vMicBad = false;
+  vStream.getAudioTracks().forEach(t => {
+    t.enabled = !vMuted;
+    t.onended = () => { showToast('Voice', 'Mic keputus (dipakai app lain / telepon masuk?). Tap 🎤 lagi.'); voiceOff(); };
+    t.onmute = () => { vMicBad = true; vUI(); };
+    t.onunmute = () => { vMicBad = false; vUI(); };
+  });
   try { vLocal = vAnalyser(vStream); if (vCtx.state === 'suspended') vCtx.resume(); } catch (_) {}
   const sg = db.ref(vpath('vsig/' + me)), vr = db.ref(vpath('voice')), mine = vr.child(me);
   await sg.remove();
@@ -839,13 +852,14 @@ function voiceOff() {
   try { db.ref(vpath('voice/' + me)).remove(); db.ref(vpath('vsig/' + me)).remove(); } catch (_) {}
   if (vStream) vStream.getTracks().forEach(t => t.stop());
   document.querySelectorAll('.talk').forEach(el => el.classList.remove('talk'));
-  vStream = null; vLocal = null; vMembers = {}; vShown = ''; $id('vspk').hidden = true; vCode = null;
+  vStream = null; vLocal = null; vMembers = {}; vShown = ''; $id('vspk').hidden = true; vCode = null; vMicBad = false;
   vUI();
 }
 function vLink() { // status sambungan ke tiap pemain, buat nyari tahu kenapa suara nggak kedengaran
   const ids = Object.keys(vMembers); if (!ids.length) return '';
   const ok = ids.filter(q => vPeers[q] && vPeers[q].pc.connectionState === 'connected').length;
-  if (ok === ids.length) return ' • tersambung ✓';
+  const blocked = ids.some(q => vPeers[q] && vPeers[q].audio && vPeers[q].audio.paused && vPeers[q].audio.srcObject);
+  if (ok === ids.length) return ' • tersambung ✓' + (blocked ? ' • ⚠ suara ketahan, tap layar sekali' : '');
   const bad = ids.some(q => vPeers[q] && ['failed', 'disconnected'].includes(vPeers[q].pc.connectionState));
   return ' • nyambung ' + ok + '/' + ids.length + (bad ? ' (gagal, jaringan butuh TURN)' : ' ...');
 }
@@ -857,7 +871,7 @@ function vUI() {
   f.className = 'fab vfab' + (vJoined ? (vPtt ? ' ptt' + (vMuted ? '' : ' on') : (vMuted ? ' mute' : ' on')) : '');
   $id('vptt').textContent = vPtt ? 'Mode: tahan ngomong' : 'Mode: open mic';
   r.hidden = !vJoined;
-  $id('vst').textContent = vJoined ? (vPtt ? (vMuted ? 'Tahan tombol ✋ buat ngomong' : 'Lagi ngomong...') : (vMuted ? 'Mic lo mati, tap 🔇 buat nyalain' : 'Mic lo nyala, tap 🎙️ buat mute')) + ' • ' + (Object.keys(vMembers).length + 1) + ' orang di voice' + vLink() : '';
+  $id('vst').textContent = vJoined ? (vPtt ? (vMuted ? 'Tahan tombol ✋ buat ngomong' : 'Lagi ngomong...') : (vMuted ? 'Mic lo mati, tap 🔇 buat nyalain' : 'Mic lo nyala, tap 🎙️ buat mute')) + ' • ' + (Object.keys(vMembers).length + 1) + ' orang di voice' + vLink() + (vMicBad ? ' • ⚠ mic lo diblok sistem (app lain / telepon lagi pakai mic?)' : '') : '';
 }
 function vSetMute(m) { vMuted = m; if (vStream) vStream.getAudioTracks().forEach(t => { t.enabled = !vMuted; }); vUI(); }
 $id('vfab').onclick = () => {
@@ -1200,14 +1214,35 @@ function drawHome() {
   mk.onclick = createRoom; jn.onclick = joinRoom; bt.onclick = createBotRoom; tt2.onclick = openTut;
   if (rc) { document.getElementById('cd').value = rc; }
 }
+// tambah bot di ruang tunggu: cuma host, cuma kalau ada minimal 2 pemain manusia, maks 4 kursi total
+function addBot() {
+  if (!room || room.status !== 'lobby' || room.host !== me) return;
+  const lvl = +($id('blv') || {}).value || 0;
+  ref.child('players').transaction(ps => {
+    if (!ps) return; // data belum kebaca, batalin
+    const ids = Object.keys(ps);
+    if (ids.filter(i => !ps[i].bot).length < 2 || ids.length >= 4) return;
+    const used = ids.map(i => ps[i].n), nm = BOTN.find(n => !used.includes('Bot ' + n)) || 'Cadangan';
+    let id; do { id = 'bot' + Math.random().toString(36).slice(2, 7); } while (ps[id]);
+    ps[id] = { n: 'Bot ' + nm, t: Date.now(), bot: true };
+    return ps;
+  }, (e, ok) => { if (ok) ref.child('bot/lv').set(lvl); });
+}
 function drawLobby() {
   const ps = Object.entries(room.players).sort((a, b) => a[1].t - b[1].t), host = room.host === me;
+  const nh = ps.filter(([, p]) => !p.bot).length, full = ps.length >= 4, blv = room.bot ? room.bot.lv | 0 : 1;
   $.innerHTML = `<h1>Ruang tunggu</h1><h2>Kasih kode ini ke temen lo</h2>
   <div class="box"><div class="code">${code}</div></div>
-  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li data-p="${id}">${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''} ${pdHTML(id)}</li>`).join('')}</ul></div>
+  <div class="box"><b>Pemain (${ps.length}/4)</b><ul>${ps.map(([id, p]) => `<li data-p="${id}">${esc(p.n)}${id === room.host ? ' (host)' : ''}${id === me ? ' (lo)' : ''} ${pdHTML(id)}${host && p.bot ? ` <button class="ghost" data-rb="${id}" style="padding:0 8px;margin-left:6px" aria-label="Hapus bot">✕</button>` : ''}</li>`).join('')}</ul></div>
+  ${host ? `<div class="row"><button id="ab" class="ghost" ${nh >= 2 && !full ? '' : 'disabled'}>＋ Tambah bot</button><select id="blv" aria-label="Level bot">${LVN.map((n, i) => `<option value="${i}" ${i === blv ? 'selected' : ''}>${n}</option>`).join('')}</select></div>${nh < 2 ? '<p class="msg">Tambah bot butuh minimal 2 pemain di room.</p>' : full ? '<p class="msg">Room penuh (maks 4).</p>' : ''}` : ''}
   <div class="row">${host ? `<button id="st" ${ps.length < 2 ? 'disabled' : ''}>${ps.length < 2 ? 'Tunggu minimal 2 pemain' : 'Mulai game'}</button>` : '<p class="msg">Nunggu host mulai game...</p>'}
   <button id="lv" class="ghost">Keluar</button></div>`;
-  if (host) st.onclick = start;
+  if (host) {
+    st.onclick = start;
+    $id('ab').onclick = addBot;
+    $id('blv').onchange = e => ref.child('bot/lv').set(+e.target.value);
+    $.querySelectorAll('[data-rb]').forEach(x => x.onclick = () => { if ((room.players[x.dataset.rb] || {}).bot) ref.child('players/' + x.dataset.rb).remove(); });
+  }
   lv.onclick = () => leave(false);
 }
 // ---------- atur kartu manual (cuma di layar pemain sendiri, berlaku di online dan lawan bot) ----------
@@ -1290,7 +1325,7 @@ function endDrag() {
   if (d.on) {
     const h = document.getElementById('hand');
     if (d.cl) d.cl.remove(); d.el.classList.remove('ph');
-    if (h && h.contains(d.el)) { order = [...h.children].map(c => +c.dataset.id); saveOrder(); }
+    if (h && h.contains(d.el)) { order = [...h.children].map(c => +c.dataset.id); saveOrder(); arnHide(); }
     dragEnd = Date.now();
     try { h.releasePointerCapture(d.pid); } catch (_) {}
   }
@@ -1306,6 +1341,28 @@ document.addEventListener('keydown', e => { // pintasan PC: Enter = Keluarkan, P
 });
 document.addEventListener('touchmove', e => { if (drag && drag.on) e.preventDefault(); }, { passive: false }); // nyeret kartu: jangan ikut scroll halaman
 
+// ---------- notif mengambang: "Rapikan kartu dulu" 30 detik di awal game ----------
+// Muncul sekali tiap game baru (belum ada kartu keluar). Hilang sendiri setelah 30 detik, atau begitu pemain udah ngerapiin (geser kartu / Kelompokkan) atau tap ✕.
+let arnT = null, arnKey = '';
+function arnHide() { clearTimeout(arnT); arnT = null; const e = document.getElementById('arn'); if (e) e.hidden = true; }
+function arnShow() {
+  const e = document.getElementById('arn'); if (!e) return;
+  e.innerHTML = '<div class="ar"><div><b>🃏 Rapikan kartu terlebih dahulu</b> <span style="color:var(--mute)">(30 detik)</span><br>' +
+    '👆 <b>Geser manual:</b> tahan sebentar sebuah kartu, lalu seret ke posisi baru (di PC langsung seret).<br>' +
+    '⚡ <b>Otomatis:</b> tap <b>Kelompokkan</b>, kartu kembar dan seri langsung dikumpulin.</div>' +
+    '<button id="arx" class="ghost" aria-label="Tutup" style="padding:0 8px">✕</button></div>' +
+    '<div class="ab"><button id="arg">Kelompokkan sekarang</button></div><div class="bar30"><i></i></div>';
+  e.hidden = false;
+  document.getElementById('arx').onclick = arnHide;
+  document.getElementById('arg').onclick = () => { order = groupHand(order); saveOrder(); arnHide(); drawGame(); };
+  clearTimeout(arnT); arnT = setTimeout(arnHide, 30000);
+}
+function arnCheck(g, h) { // game baru = tangan baru dan belum ada kartu keluar
+  if (g.over || (g.log || []).length || !h || h.length < 2) return;
+  const k = code + ':' + h.join(',');
+  if (k === arnKey) return;
+  arnKey = k; arnShow();
+}
 function drawGame() {
   const g = room.game; if (!g) return;
   const ln = (g.log || []).length; // efek suara saat ada kartu keluar (dari siapa pun)
@@ -1314,6 +1371,7 @@ function drawGame() {
   const P = room.players, hands = g.hands || {}, passed = g.passed || {}, last = g.last || null;
   const dec = g.dec || {}, pend = Object.keys(dec).length, fin = g.fin || [], rank = p => fin.indexOf(p) + 1, stopped = g.stopped || {};
   const cur = g.order[g.turn], mine = syncOrder(hands[me] || []);
+  arnCheck(g, hands[me]);
   const myTurn = cur === me && !g.over && !pend && !fin.includes(me);
   const mi = g.order.indexOf(me), after = g.order.map((_, k) => g.order[(mi + 1 + k) % g.order.length]).slice(0, g.order.length - 1).reverse(); // pemain berikutnya ada di paling kanan
   const opps = after.map(p => `<div data-p="${p}" class="opp ${cur === p && !g.over && !pend ? 'turn' : ''} ${passed[p] || rank(p) ? 'pass' : ''}">${esc(P[p]?.n || '?')}${pdHTML(p)}${rank(p) ? 'Juara ' + rank(p) + (stopped[p] ? ' (murni)' : '') : `<b>${(hands[p] || []).length}</b> kartu${passed[p] ? '<br>lewat' : ''}`}${dec[p] ? '<br>murni, milih...' : ''}</div>`).join('');
@@ -1352,7 +1410,7 @@ function drawGame() {
   if (dec[me]) { bh.onclick = () => decideCall(true); kt.onclick = () => decideCall(false); }
   if (g.over) { if (hostNow()) again.onclick = start; return; }
   if (g.first && myTurn) a3.onclick = () => { sel.clear(); mine.filter(c => rk(c) === 0).forEach(c => sel.add(c)); drawGame(); };
-  if (mine.length > 1) kp.onclick = () => { order = groupHand(order); saveOrder(); drawGame(); };
+  if (mine.length > 1) kp.onclick = () => { order = groupHand(order); saveOrder(); arnHide(); drawGame(); };
   pl.onclick = () => play(false); ps.onclick = () => play(true); cl.onclick = () => { sel.clear(); drawGame(); };
 }
 function leaveGame() {
