@@ -55,8 +55,8 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.chip{padding:4px 10px;font-size:.82rem;font-weight:normal}
 .fab{position:fixed;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:20;width:46px;height:46px;padding:0;border-radius:50%;font-size:1.3rem;opacity:.92;box-shadow:0 2px 10px #0008}
 .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:.72rem;line-height:18px;font-weight:bold}
-.arn{position:fixed;left:12px;right:12px;top:calc(84px + env(safe-area-inset-top,0px));z-index:18;max-width:520px;margin:0 auto;background:#000e;border:1px solid var(--gold);border-radius:14px;padding:10px 12px 12px;font:.88rem/1.45 system-ui,sans-serif;box-shadow:0 4px 18px #0009;animation:arin .25s ease-out}.arn[hidden]{display:none}.arn b{color:var(--gold)}.arn .ar{display:flex;gap:8px;align-items:flex-start}.arn .ar>div{flex:1}.arn .ab{margin-top:8px;display:flex;gap:8px;align-items:center}.arn .ab button{padding:6px 12px;font-size:.85rem}.arn .bar30{height:3px;border-radius:2px;background:#ffffff22;margin-top:10px;overflow:hidden}.arn .bar30 i{display:block;height:100%;background:var(--gold);animation:arbar 30s linear forwards}
-@keyframes arin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}@keyframes arbar{from{width:100%}to{width:0}}
+.arn{position:fixed;left:12px;right:12px;top:calc(84px + env(safe-area-inset-top,0px));z-index:18;max-width:520px;margin:0 auto;background:#000e;border:1px solid var(--gold);border-radius:14px;padding:10px 12px 12px;font:.88rem/1.45 system-ui,sans-serif;box-shadow:0 4px 18px #0009;animation:arin .25s ease-out}.arn[hidden]{display:none}.arn b{color:var(--gold)}.arn .ar{display:flex;gap:8px;align-items:flex-start}.arn .ar>div{flex:1}.arn .ab{margin-top:8px;display:flex;gap:8px;align-items:center}.arn .ab button{padding:6px 12px;font-size:.85rem}.arn .bar30{height:3px;border-radius:2px;background:#ffffff22;margin-top:10px;overflow:hidden}.arn .bar30 i{display:block;width:100%;height:100%;background:var(--gold);transform-origin:left;animation:arbar 30s linear forwards}
+@keyframes arin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}@keyframes arbar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
 .toast{position:fixed;left:12px;right:70px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:19;background:#000d;border:1px solid var(--gold);border-radius:12px;padding:8px 12px;font-size:.92rem;cursor:pointer;word-break:break-word}
 .badge[hidden],.toast[hidden]{display:none}
 .vfab{bottom:calc(70px + env(safe-area-inset-bottom,0px))}.vfab.on{box-shadow:0 0 0 3px #7be3a0,0 2px 10px #0008}.vfab.mute{background:var(--red);color:#fff}
@@ -176,7 +176,8 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-const VER = 'v44'; // naik tiap ada perubahan aturan; dipakai buat deteksi pemain yang masih pakai halaman lama
+const VER = 'v44.1'; // major = angka biasa (v45), minor = tambah titik (v44.1). Major dinaikkan kalau aturan/data game berubah
+const VMAJ = VER.split('.')[0]; // yang disimpan di data game & dicek kecocokannya: cuma bagian major
 document.getElementById('gver').textContent = VER;
 const R = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'], S = ['♠','♣','♦','♥'];
 const rk = id => id >> 2, su = id => id & 3;
@@ -353,14 +354,14 @@ function deal(pids, lead) {
     if (!hands[p].some(c => rk(c) >= 8 && rk(c) <= 10)) dec[p] = true; // murni: nol J, Q, K
   });
   const q2 = pids.find(p => hands[p].filter(c => rk(c) === 12).length === 4); // dapat 4 kartu 2 = kalah instan, ulang dari kumpulin 3
-  if (q2) return { v: VER, order: pids, hands, s: -1, st: q2, turn: 0, last: null, passed: {}, first: false, over: true, quad2: q2, winner: null, dec: null };
+  if (q2) return { v: VMAJ, order: pids, hands, s: -1, st: q2, turn: 0, last: null, passed: {}, first: false, over: true, quad2: q2, winner: null, dec: null };
   let low = -1, start = pids.indexOf(lead), col = false;
   if (start < 0) {
     low = Math.min(...pids.map(p => hands[p][0]));
     start = pids.findIndex(p => hands[p].includes(low));
     col = low < 4; // ada kartu 3 yang terbagi -> fase kumpulin 3 (kalau nggak ada, pemegang kartu terendah buka bebas)
   }
-  return { v: VER, order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
+  return { v: VMAJ, order: pids, hands, s: low, st: pids[start], turn: start, last: null, passed: {}, first: col, over: false, dec: Object.keys(dec).length ? dec : null };
 }
 
 // ---------- bot (lawan komputer): 0 Mudah, 1 Sedang, 2 Susah, 3 Master ----------
@@ -559,7 +560,7 @@ function driver() {
 let buzzKey = '';
 function turnBuzz() {
   const g = room && room.game;
-  if (!g || room.status === 'lobby' || g.over || g.v !== VER || (g.dec && Object.keys(g.dec).length)) { buzzKey = ''; return; }
+  if (!g || room.status === 'lobby' || g.over || g.v !== VMAJ || (g.dec && Object.keys(g.dec).length)) { buzzKey = ''; return; }
   if (g.order[g.turn] !== me || (g.fin || []).includes(me)) { buzzKey = ''; return; }
   const key = (g.log || []).length + ':' + g.turn;
   if (key === buzzKey) return;
@@ -569,10 +570,10 @@ function turnBuzz() {
 const hostNow = () => driver() === me; // "host efektif": host asli kalau masih aktif, kalau nggak pemain aktif berikutnya
 function botTick() {
   if (!room || room.status === 'lobby' || botT || !conn || Date.now() - connAt < 3000) return; // jeda 3 dtk habis reconnect: tunggu data presence segar
-  const g = room.game; if (!g || g.over || g.v !== VER) return;
+  const g = room.game; if (!g || g.over || g.v !== VMAJ) return;
   if (driver() !== me) return;
   const lv = room.bot ? room.bot.lv | 0 : 2, dec = g.dec || {}, bd = Object.keys(dec).find(p => p !== me && auto(p));
-  if (bd) { botT = setTimeout(() => { botT = null; if (!auto(bd) || driver() !== me) return botTick(); const stop = isBot(bd) ? botDecide(lv) : false; ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : decide(x, bd, stop), () => botTick(), false); }, 600); return; }
+  if (bd) { botT = setTimeout(() => { botT = null; if (!auto(bd) || driver() !== me) return botTick(); const stop = isBot(bd) ? botDecide(lv) : false; ref.child('game').transaction(x => x === null ? x : x.v !== VMAJ ? undefined : decide(x, bd, stop), () => botTick(), false); }, 600); return; }
   if (Object.keys(dec).length) return; // nunggu pemain murni (manusia yang masih aktif) memilih
   const cur = g.order[g.turn];
   if (cur === me || !auto(cur) || (g.fin || []).includes(cur)) return;
@@ -581,7 +582,7 @@ function botTick() {
     const g2 = room && room.game;
     if (!g2 || g2.over || g2.order[g2.turn] !== cur || !auto(cur) || driver() !== me) return botTick(); // pemain udah balik / giliran udah pindah
     const m = botMove(g2, cur, lv);
-    const run = (cards, pass, next) => ref.child('game').transaction(x => x === null ? x : x.v !== VER ? undefined : move(x, cur, cards, pass), (e, ok) => { if (!ok && next) next(); else botTick(); }, false);
+    const run = (cards, pass, next) => ref.child('game').transaction(x => x === null ? x : x.v !== VMAJ ? undefined : move(x, cur, cards, pass), (e, ok) => { if (!ok && next) next(); else botTick(); }, false);
     run(m.cards || [], !!m.pass, () => run([], true, () => run([Math.min(...(g2.hands[cur] || [0]))], false))); // cadangan: lewat, lalu kartu terkecil
   }, 800 + Math.random() * 700);
 }
@@ -599,7 +600,7 @@ async function createBotRoom() {
   }
   setErr('Gagal bikin room, coba lagi.');
 }
-function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : g.v !== VER ? undefined : decide(g, me, stop)); }
+function decideCall(stop) { ref.child('game').transaction(g => g === null ? g : g.v !== VMAJ ? undefined : decide(g, me, stop)); }
 function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan lo. Coba refresh halaman.';
@@ -613,9 +614,9 @@ function why(g, cards) {
 }
 function play(pass) {
   const cards = [...sel];
-  if (room.game && room.game.v !== VER) return setErr('Versi halaman lo beda dengan game ini. Tunggu update otomatis atau hard refresh dulu.');
+  if (room.game && room.game.v !== VMAJ) return setErr('Versi halaman lo beda dengan game ini. Tunggu update otomatis atau hard refresh dulu.');
   if (!pass && room.game) { const w = why(room.game, cards); if (w) return setErr(w); }
-  ref.child('game').transaction(g => g === null ? g : g.v !== VER ? undefined : move(g, me, cards, pass), (e, ok) => {
+  ref.child('game').transaction(g => g === null ? g : g.v !== VMAJ ? undefined : move(g, me, cards, pass), (e, ok) => {
     if (!ok) { err = pass ? 'Tidak bisa lewat sekarang.' : 'Kombinasi tidak valid / tidak cukup tinggi.'; draw(); }
     else { err = ''; sel.clear(); }
   }, false);
@@ -1421,7 +1422,7 @@ function drawGame() {
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran lo buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
   const status = g.over ? (g.bomb || g.quad2 || g.self2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Lo juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran lo. Keluarin semua kartu 3 lo sekaligus.' : 'Giliran lo') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
-  const oldVer = g.v !== VER ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
+  const oldVer = g.v !== VMAJ ? '<div class="box err">Versi halaman lo beda dengan game ini. Halaman akan update otomatis; kalau nggak, hard refresh atau buka tab private, lalu host mulai game ulang.</div>' : '';
   $.innerHTML = `${oldVer}<div class="row" style="justify-content:space-between"><b>Room ${code}</b><button id="lv" class="ghost" style="flex:0">Keluar</button></div>
   <div class="opps" style="margin-top:8px">${opps}</div>
   <div class="table">${center}</div>
@@ -1490,6 +1491,19 @@ function leaveGame() {
   } else draw();
 })();
 document.getElementById('tt').onclick = openTut;
+// meter FPS kecil di pojok kiri bawah. Nyalain: tambah ?fps=1 di URL (tersimpan). Matiin: ?fps=0
+(function fpsMeter() {
+  const qf = new URLSearchParams(location.search).get('fps');
+  try { if (qf === '1') localStorage.setItem('k13fps', '1'); else if (qf === '0') localStorage.removeItem('k13fps'); } catch (_) {}
+  let on = false; try { on = localStorage.getItem('k13fps') === '1'; } catch (_) {}
+  if (!on) return;
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));z-index:99;font:11px/1 monospace;color:#7be3a0;background:#000b;padding:4px 6px;border-radius:6px;pointer-events:none';
+  document.body.appendChild(el);
+  let f = 0, t0 = performance.now(), last = t0, worst = 0;
+  const loop = t => { f++; worst = Math.max(worst, t - last); last = t; if (t - t0 >= 1000) { el.textContent = Math.round(f * 1000 / (t - t0)) + ' fps | terburuk ' + Math.round(worst) + ' ms'; f = 0; worst = 0; t0 = t; } requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+})();
 </script>
 </body>
 </html>
