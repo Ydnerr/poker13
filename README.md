@@ -22,7 +22,7 @@ Game kartu **13 kartu** (gaya Tiến Lên) yang bisa dimainkan langsung di brows
 - Logo (♠ ♣ ♦ ♥) tidak dibandingkan. Angka yang sama tidak bisa saling mengalahkan. Logo hanya menentukan siapa yang pegang 3♠ di awal.
 - Di awal game ada fase **kumpulin 3**: semua kartu 3 dikeluarkan sekaligus.
 - Kombinasi: kartu tunggal, kembar, seri (minimal 3 kartu, satu logo, angka 3 sampai 10), dan bom.
-- **Seri spesial J Q K:** tepat 3 kartu J, Q, K satu logo juga dianggap seri. Ini seri 3 kartu tertinggi, jadi menang lawan seri 3 kartu biasa (mis. 8 9 10). Nggak bisa disambung ke 10 atau A, dan bukan bom.
+- **Seri spesial J Q K:** tepat 3 kartu J, Q, K satu logo juga dianggap seri. Ini seri 3 kartu tertinggi, jadi menang lawan seri 3 kartu biasa (mis. 8 9 10). Boleh ditambah 1 pasangan (5 kartu) seperti seri biasa. Nggak bisa disambung ke 10 atau A, dan bukan bom.
 - **Bom** yang menimpa kartu 2 langsung menang.
 - Habis kartu dengan kartu 2 berarti **ngebom diri sendiri**: kalah, dan game diulang dari fase kumpulin 3.
 - Pemegang **kartu murni** (tanpa J, Q, K) boleh berhenti dan langsung jadi juara, game tetap lanjut untuk yang lain.

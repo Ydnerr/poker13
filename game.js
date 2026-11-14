@@ -45,6 +45,14 @@ function ev(cs) {
     const gs = Object.values(m), q4 = gs.find(a => a.length === 4), pr = gs.find(a => a.length === 2);
     if (gs.length === 2 && q4 && pr) return { t: 'g', n, k: Math.max(...q4), k2: Math.max(...pr), m: q4 };
   }
+  if (n === 5) { // SERI SPESIAL J Q K satu logo + pasangan
+    for (let s = 0; s < 4; s++) {
+      const core = [8, 9, 10].map(r => r * 4 + s);
+      if (!core.every(x => c.includes(x))) continue;
+      const rest = c.filter(x => !core.includes(x));
+      if (rk(rest[0]) === rk(rest[1])) return { t: 'x', n, k: core[2], k2: Math.max(...rest), m: core };
+    }
+  }
   if (n >= 5) { // seri satu logo (min 3 kartu) + pasangan
     const L = n - 2;
     for (let s = 0; s < 4; s++) for (let st = 0; st + L - 1 <= 7; st++) {
@@ -225,6 +233,7 @@ function combos(hand) { // semua kombinasi valid dari tangan
     }
   });
   sers.forEach(sr => prs.forEach(p => { if (!p.some(x => sr.includes(x))) out.push(sr.concat(p)); }));
+  for (let s = 0; s < 4; s++) { const q = [8, 9, 10].map(r => r * 4 + s); if (q.every(x => c.includes(x))) prs.forEach(p => { if (!p.some(x => q.includes(x))) out.push(q.concat(p)); }); } // seri spesial J Q K + pasangan
   return out.map(cs => ({ cs, e: ev(cs) })).filter(o => o.e);
 }
 function unseenOf(g, pid) { // kartu yang belum kelihatan (bukan di tangan bot dan belum keluar)
@@ -445,11 +454,11 @@ function why(g, cards) {
   const hand = g.hands[me] || [], last = g.last || null, e = ev(cards);
   if (!cards.every(c => hand.includes(c))) return 'Kartu itu nggak ada di tangan kamu. Coba refresh halaman.';
   if (g.first) { const m3 = hand.filter(c => rk(c) === 0); return cards.length === m3.length && m3.every(c => cards.includes(c)) ? '' : 'Fase kumpulin 3: keluarin semua kartu 3 kamu sekaligus (' + m3.length + ' kartu).'; }
-  if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Seri harus satu logo semua (3+ kartu berurutan, angka 3 sampai 10), atau seri spesial J Q K satu logo. Lainnya: pasangan, 3 kembar, 3 kembar + pasangan, seri + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
+  if (!e) return cards.length > 2 ? 'Bukan kombinasi valid. Seri harus satu logo semua (3+ kartu berurutan, angka 3 sampai 10), atau seri spesial J Q K satu logo (boleh + pasangan). Lainnya: pasangan, 3 kembar, 3 kembar + pasangan, seri + pasangan.' : 'Dua kartu harus angka sama (pasangan).';
   if (cuts(e, last)) return '';
   if (last && twoPlay(last)) return last.c.length === 1 ? 'Kartu 2 nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom (4 kembar, seri 5 satu logo, atau bom x2).' : 'Kartu 2 kembar nggak bisa dibales kartu biasa. Cuma bisa lewat atau dipotong bom x2 (8 kartu kembar).';
   if (last && twoPlay(last) && last.c.length >= 2 && (isBomb(e) || e.t === 'q')) return 'Kartu 2 kembar cuma bisa dipotong 8 kartu kembar (2 x 4 kembar, misal 3333 + 6666).';
-  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + (isJQK(last) ? 'seri 3 kartu (J Q K)' : typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '')) + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Bagian utamanya (3 kembar / seri / 4 kembar) harus lebih tinggi dari yang di meja. Pasangannya bebas.' : 'Kartunya kurang tinggi dari yang di meja.');
+  if (last && !beats(e, last)) return (e.t !== last.t || e.n !== last.n) ? 'Harus jenis dan jumlah kartu yang sama: ' + (isJQK(last) ? jqkName(last).toLowerCase() : typeName[last.t] + (last.t === 'r' ? ' ' + last.n + ' kartu' : '')) + '.' : ((e.t === 'f' || e.t === 'x' || e.t === 'g') ? 'Bagian utamanya (3 kembar / seri / 4 kembar) harus lebih tinggi dari yang di meja. Pasangannya bebas.' : 'Kartunya kurang tinggi dari yang di meja.');
   return '';
 }
 function play(pass) {
@@ -1006,7 +1015,7 @@ const cid = t => R.indexOf(t.slice(0, -1)) * 4 + S.indexOf(t.slice(-1));
 const TUT = [
   { h: 'Tujuan dan urutan kartu', p: ['Tiap pemain dapat 13 kartu. Siapa yang kartunya habis duluan jadi juara 1.', 'Urutan dari kecil ke besar: 3 4 5 6 7 8 9 10 J Q K A 2. Kartu 2 paling tinggi.', 'Logo (♠ ♣ ♦ ♥) nggak dihitung buat membandingkan. Angka sama nggak bisa saling kalahin: 9 9 nggak bisa dilawan 9 9. Logo cuma dipakai di awal game buat nentuin 3♠.'], ex: [['Contoh urutan', ['3♠', '7♣', '10♦', 'K♥', 'A♠', '2♣']]] },
   { h: 'Kombinasi dasar', p: ['Kamu bisa keluarin satu jenis kombinasi tiap giliran:'], ex: [['Tunggal (1 kartu)', ['9♦']], ['Pasangan (2 angka sama)', ['5♦', '5♥']], ['3 kembar (3 angka sama)', ['8♠', '8♣', '8♦']]] },
-  { h: 'Seri', p: ['Seri = minimal 3 kartu berurutan, wajib satu logo, dan angka 3 sampai 10. Seri terpanjang 8 kartu.','Pengecualian: seri spesial J Q K. Tepat 3 kartu J, Q, K satu logo juga dianggap seri, dan jadi seri 3 kartu tertinggi (menang lawan seri 3 kartu biasa, mis. 8 9 10). Cuma J Q K, nggak boleh disambung ke 10 atau A.'], ex: [['✅ Seri sah', ['5♦', '6♦', '7♦']], ['❌ Beda logo', ['5♦', '6♥', '7♦']], ['❌ Ada J (di atas 10)', ['9♠', '10♠', 'J♠']], ['✅ Seri spesial J Q K', ['J♣', 'Q♣', 'K♣']], ['❌ J Q K beda logo', ['J♣', 'Q♦', 'K♣']]] },
+  { h: 'Seri', p: ['Seri = minimal 3 kartu berurutan, wajib satu logo, dan angka 3 sampai 10. Seri terpanjang 8 kartu.','Pengecualian: seri spesial J Q K. Tepat 3 kartu J, Q, K satu logo juga dianggap seri, dan jadi seri 3 kartu tertinggi (menang lawan seri 3 kartu biasa, mis. 8 9 10). Cuma J Q K, nggak boleh disambung ke 10 atau A. Seperti seri biasa, boleh ditambah 1 pasangan (5 kartu) dan tetap menang lawan seri + pasangan biasa.'], ex: [['✅ Seri sah', ['5♦', '6♦', '7♦']], ['❌ Beda logo', ['5♦', '6♥', '7♦']], ['❌ Ada J (di atas 10)', ['9♠', '10♠', 'J♠']], ['✅ Seri spesial J Q K', ['J♣', 'Q♣', 'K♣']], ['✅ J Q K + pasangan', ['J♦', 'Q♦', 'K♦', '7♠', '7♦']], ['❌ J Q K beda logo', ['J♣', 'Q♦', 'K♣']]] },
   { h: 'Kombinasi + pasangan', p: ['Ada 3 jenis yang ditambah 1 pasangan (5 kartu atau lebih):'], ex: [['3 kembar + pasangan', ['4♠', '4♣', '4♦', '5♠', '5♥']], ['Seri + pasangan', ['3♠', '4♠', '5♠', '7♣', '7♦']], ['4 kembar + pasangan', ['9♠', '9♣', '9♦', '9♥', 'J♠', 'J♥']]], p2: ['Pasangannya bebas angkanya, boleh sama dengan angka di serinya, asal kembar.'] },
   { h: 'Cara melawan kartu di meja', p: ['Kamu harus keluarin kombinasi yang sejenis, jumlah kartunya sama, dan lebih tinggi. Atau pilih Lewat.', 'Untuk kombinasi + pasangan, yang dibandingkan cuma bagian utamanya (3 kembar, seri, atau 4 kembar). Pasangannya bebas.'], ex: [['Meja: pasangan 5. Kamu boleh:', ['7♠', '7♣']], ['Meja: 4 4 4 + 5 5. Kamu boleh:', ['6♠', '6♣', '6♦', '4♥', '4♣']], ['Meja: seri 3♠ 4♠ 5♠. Seri beda logo boleh:', ['6♦', '7♦', '8♦']]] },
   { h: 'Lewat dan jalannya ronde', p: ['Lewat cuma berlaku untuk giliran itu. Kalau ada yang keluarin kartu lagi, semua pemain dapat giliran lagi.', 'Kalau semua pemain lain lewat, pemain terakhir yang keluarin kartu buka ronde baru dengan kombinasi bebas.', 'Giliran bergerak ke arah kanan.'], ex: [] },
@@ -1091,7 +1100,8 @@ function gPlay(d) {
   gWin(d);
 }
 function closeTut() { const t = document.getElementById('tut'); if (t) t.classList.remove('on'); }
-const isJQK = l => !!l && l.t === 'r' && l.n === 3 && (l.c || []).every(c => rk(c) >= 8); // seri spesial J Q K
+const isJQK = l => !!l && (l.t === 'r' || l.t === 'x') && rk(l.k) === 10; // seri spesial J Q K (3 kartu, atau + pasangan = 5 kartu). Seri biasa maksimal angka 10, jadi kunci K pasti J Q K
+const jqkName = l => l.t === 'x' ? 'Seri spesial J Q K + pasangan' : 'Seri spesial J Q K';
 const typeName = { s: 'Tunggal', p: 'Pasangan', t: 'Tiga kembar', q: 'Bom 4 kembar', d: '8 kartu kembar (2 x 4)', g: '4 kembar + pasangan', r: 'Seri satu logo', c: 'Kumpulin angka 3', f: '3 kembar + pasangan', x: 'Seri satu logo + pasangan' };
 
 function draw() {
@@ -1323,7 +1333,7 @@ function drawGame() {
   else if (g.over && !g.bomb) center = `<div class="win">Permainan selesai</div>${fin.map((p, i) => `<div>Juara ${i + 1}: <b>${esc(P[p]?.n || '?')}</b>${p === me ? ' (kamu)' : ''}</div>`).join('')}`;
   else if (g.over) center = `<div class="win">${g.winner === me ? 'Kamu menang!' : esc(P[g.winner]?.n) + ' menang'}</div>${g.bomb && last ? `<div>Memotong kartu 2 pakai ${BL(last)}</div><div class="cards">${cardsOf(last.c)}</div>` : ''}`;
   else if (pend) center = `<div>Ada kartu murni (tanpa J, Q, K). Game mulai setelah pemain murni memilih.</div>`;
-  else if (last) center = `<div>${esc(P[last.p]?.n)} • ${isJQK(last) ? 'Seri spesial J Q K' : typeName[last.t] + (last.t === 'r' ? ' ' + last.n : '')}</div><div class="cards">${cardsOf(last.c)}</div>`;
+  else if (last) center = `<div>${esc(P[last.p]?.n)} • ${isJQK(last) ? jqkName(last) : typeName[last.t] + (last.t === 'r' ? ' ' + last.n : '')}</div><div class="cards">${cardsOf(last.c)}</div>`;
   else if (g.first) center = `<div>Fase kumpulin 3: tiap pemain keluarin semua kartu 3-nya sekaligus. Pemegang 3 terendah (3♠ kalau ada) jalan duluan setelahnya.</div>`;
   else center = `<div>${myTurn ? 'Giliran kamu buka, bebas kombinasi' : esc(P[cur]?.n) + ' buka ronde baru'}</div>`;
   const status = g.over ? (g.bomb || g.quad2 || g.self2 ? 'Game berikutnya: pemegang kartu 3 jalan duluan, wajib keluarin kartu 3 itu.' : 'Game berikutnya: juara 1 jalan duluan, bebas kombinasi.') : fin.includes(me) ? 'Kamu juara ' + rank(me) + '. Nunggu pemain lain selesai.' : pend ? 'Nunggu pemain murni memilih...' : myTurn ? (g.first ? 'Giliran kamu. Keluarin semua kartu 3 kamu sekaligus.' : 'Giliran kamu') : (g.first ? 'Fase kumpulin 3. ' : '') + `Giliran ${esc(P[cur]?.n)}`;
