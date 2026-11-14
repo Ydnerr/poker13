@@ -2,7 +2,7 @@
    Buka kedua dan seterusnya jadi cepat dan hemat kuota. index.html SENGAJA nggak disentuh,
    jadi halaman selalu diambil baru dan auto-update tetap jalan.
    game.min.js dan style.css: jaringan dulu (selalu versi terbaru, cuma 304 kalau nggak berubah), cache cuma cadangan kalau
-   jaringan lambat (>4 detik) atau mati. Jadi lo nggak perlu ganti nama file atau tambah ?v= tiap rilis.
+   jaringan lambat (>4 detik) atau mati. Jadi kamu nggak perlu ganti nama file atau tambah ?v= tiap rilis.
    Naikin V kalau mau maksa semua orang buang cache lama. */
 const V = 'k13-assets-v4';
 const CODE = ['game.min.js', 'style.css'];
@@ -22,7 +22,7 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
-// cards/ dan cover/: langsung dari cache, sambil diam-diam dicek versi terbarunya (kalau lo ganti gambar, muncul di buka berikutnya)
+// cards/ dan cover/: langsung dari cache, sambil diam-diam dicek versi terbarunya (kalau kamu ganti gambar, muncul di buka berikutnya)
 async function swr(r) {
   const u = new URL(r.url), key = u.origin + u.pathname, c = await caches.open(V), hit = await c.match(key);
   const net = fetch(r).then(res => { if (res.ok) c.put(key, res.clone()); return res; }).catch(() => null);
