@@ -4,7 +4,7 @@
    game.min.js dan style.css: jaringan dulu (selalu versi terbaru, cuma 304 kalau nggak berubah), cache cuma cadangan kalau
    jaringan lambat (>4 detik) atau mati. Jadi kamu nggak perlu ganti nama file atau tambah ?v= tiap rilis.
    Naikin V kalau mau maksa semua orang buang cache lama. */
-const V = 'k13-assets-v4';
+const V = 'k13-assets-v5';
 const CODE = ['game.min.js', 'style.css'];
 const FB = ['https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js', 'https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js'];
 const LOCAL = ['cards/back.webp', 'cover/bg-portrait.svg', 'cover/bg-landscape.svg'];
